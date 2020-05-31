@@ -2,21 +2,28 @@ CC := g++ -c
 LD := g++
 INCLUDES += -I.
 LIBS +=
-CFLAGS := $(INCLUDES) -g -O0
-LDFLAGS :=
+# CFLAGS := $(INCLUDES) -g -O0
+CFLAGS := $(INCLUDES) -O3 -DNDEBUG=1 -fopenmp
+LDFLAGS := -fopenmp
 
 .PHONY: all clean
 
-all: test
+all: train test
 
 clean:
-	rm -rf test test.o ime.o
+	rm -rf train test ime.o train.o test.o
+
+train: train.o ime.o
+	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 test: test.o ime.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test.o: test.cc
+ime.o: ime.cc
 	$(CC) $(CFLAGS) -o $@ $^
 
-ime.o: ime.cc
+train.o: train.cc
+	$(CC) $(CFLAGS) -o $@ $^
+
+test.o: test.cc
 	$(CC) $(CFLAGS) -o $@ $^
