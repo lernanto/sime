@@ -23,10 +23,10 @@
 #endif  // LOG_LEVEL
 
 #define LOG(level)  if ((level) >= LOG_LEVEL) std::cerr
-#define VERBOSE LOG(LOG_VERBOSE)
-#define DEBUG   LOG(LOG_DEBUG)
-#define INFO    LOG(LOG_INFO)
-#define WARN    LOG(LOG_WARN)
-#define ERROR   LOG(LOG_ERROR)
+#define VERBOSE LOG(LOG_VERBOSE) << "[V] " << __FILE__ << ':' << __FUNCTION__ << ':' << __LINE__ << ": "
+#define DEBUG   LOG(LOG_DEBUG) << "[D] " << __FILE__ << ':' << __FUNCTION__ << ':' << __LINE__ << ": "
+#define INFO    LOG(LOG_INFO) << "[I] "
+#define WARN    LOG(LOG_WARN) << "[W] "
+#define ERROR   LOG(LOG_ERROR) << "[E] "
 
 #endif  // _LOG_H_
