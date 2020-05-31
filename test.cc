@@ -13,15 +13,31 @@
 
 int main(int argc, char **argv)
 {
-    ime::Dictionary dict("test.dic");
 
+    std::string dict_file = argv[1];
+    std::string model_file = argv[2];
+
+    ime::Dictionary dict(dict_file);
     ime::Decoder decoder(dict);
-    decoder.train("test.txt");
+    decoder.load(model_file);
 
-    const std::string code = "ceshiceshi";
-    auto paths = decoder.decode(code);
-    std::cout << "paths: " << std::endl;
-    decoder.output_paths(std::cout, code, paths);
+    while (!std::cin.eof())
+    {
+        std::string code;
+        std::cin >> code;
+
+        std::vector<std::string> texts;
+        std::vector<double> probs;
+        if (decoder.predict(code, 10, texts, probs))
+        {
+            assert(texts.size() == probs.size());
+
+            for (size_t i = 0; i < texts.size(); ++i)
+            {
+                std::cout << i + 1 << ": " << texts[i] << ' ' << probs[i] << std::endl;
+            }
+        }
+    }
 
     return 0;
 }

@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 
 #include "log.h"
 
@@ -63,41 +64,71 @@ class Model
 public:
     explicit Model(double lr = 0.01) : weights(), learning_rate(lr) {}
 
-    double score(std::map<std::string, double> &features) const
+    bool save(std::ostream &os) const;
+
+    bool save(const std::string &fname) const
+    {
+        std::ofstream os(fname);
+        return save(os);
+    }
+
+    bool load(std::istream &is);
+
+    bool load(const std::string &fname)
+    {
+        std::ifstream is(fname);
+        return load(is);
+    }
+
+    template<typename Iterator>
+    double score(Iterator begin, Iterator end) const
     {
         double sum = 0;
 
-        for (auto &i : features) {
-            auto iter = weights.find(i.first);
+        for (auto i = begin; i != end; ++i)
+        {
+            auto iter = weights.find(i->first);
             if (iter != weights.cend())
             {
-                sum += i.second * iter->second;
+                sum += i->second * iter->second;
             }
         }
 
         return sum;
     }
 
-    bool update(const std::map<std::string, double> &features, double delta)
+    template<typename Iterator>
+    void update(Iterator begin, Iterator end, double delta)
     {
-        if (LOG_LEVEL == LOG_DEBUG)
+        if (LOG_LEVEL <= LOG_DEBUG)
         {
             DEBUG << "update: ";
-            for (auto &i : features)
+            for (auto i = begin; i != end; ++i)
             {
-                DEBUG << i.first << ':' << i.second << ',';
+                DEBUG << i->first << ':' << i->second << ',';
             }
             DEBUG << " +" << delta << '*' << learning_rate << std::endl;
         }
 
-        for (auto &i : features)
+        for (auto i = begin; i != end; ++i)
         {
-            DEBUG << i.first << ':' << weights[i.first] << " + " << i.second << '*' << delta << '*' << learning_rate;
-            weights[i.first] += i.second * delta * learning_rate;
-            DEBUG << " = " << weights[i.first] << std::endl;
+            DEBUG << i->first << ':' << weights[i->first] << " + " << i->second << '*' << delta << '*' << learning_rate;
+            weights[i->first] += i->second * delta * learning_rate;
+            DEBUG << " = " << weights[i->first] << std::endl;
         }
+    }
 
-        return true;
+    template<typename F>
+    void update(
+        const std::vector<F> &features,
+        const std::vector<double> &deltas
+    )
+    {
+        assert(features.size() == deltas.size());
+        for (size_t i = 0; i < features.size(); ++i)
+        {
+            update(features[i].begin(), features[i].end(), deltas[i]);
+        }
     }
 
 private:
@@ -172,7 +203,12 @@ public:
         return decode(code, text, beams, beam_size);
     }
 
-    bool update(const std::string &code, const std::string &text);
+    bool decode(
+        const std::string &code,
+        size_t max_path,
+        std::vector<std::vector<Node>> &paths,
+        std::vector<double> &probs
+    ) const;
 
     std::vector<std::vector<Node>> decode(const std::string &code, size_t max_path = 10) const
     {
@@ -184,25 +220,114 @@ public:
     std::ostream & output_paths(
         std::ostream &os,
         const std::string &code,
-        size_t pos,
         const std::vector<std::vector<Node>> &paths
     ) const;
 
-    std::ostream & output_paths(
-        std::ostream &os,
+    bool update(
         const std::string &code,
-        const std::vector<std::vector<Node>> &paths
-    ) const
+        const std::string &text,
+        int &index,
+        double &prob
+    );
+
+    bool update(
+        const std::vector<std::string> &codes,
+        const std::vector<std::string> &texts,
+        std::vector<int> &indeces,
+        std::vector<double> &probs
+    );
+
+    bool update(
+        const std::vector<std::string> &codes,
+        const std::vector<std::string> &texts,
+        double &precision,
+        double &loss
+    );
+
+    std::vector<std::string> predict(const std::string &code, size_t num = 1) const
     {
-        return output_paths(os, code, code.length(), paths);
+        auto paths = decode(code, num);
+        return get_texts(paths);
     }
 
-    bool train(std::istream &is);
+    bool predict(
+        const std::string &code,
+        size_t num,
+        std::vector<std::string> &texts,
+        std::vector<double> &probs
+    ) const
+    {
+        std::vector<std::vector<Node>> paths;
+        if (decode(code, num, paths, probs))
+        {
+            texts = get_texts(paths);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
 
-    bool train(const std::string &fname)
+    bool predict(
+        const std::string &code,
+        std::vector<std::string> &texts,
+        std::vector<double> &probs
+    ) const
+    {
+        return predict(code, beam_size, texts, probs);
+    }
+
+    bool train(std::istream &is, std::map<std::string, double> &metrics);
+
+    /**
+     * 训练模型，批量更新版本.
+     */
+    bool train(
+        std::istream &is,
+        size_t batch_size,
+        std::map<std::string, double> &metrics
+    );
+
+    bool train(
+        const std::string &fname,
+        std::map<std::string, double> &metrics,
+        size_t batch_size = 1
+    )
     {
         std::ifstream is(fname);
-        return train(is);
+        if (batch_size == 1)
+        {
+            return train(is, metrics);
+        }
+        else
+        {
+            return train(is, batch_size, metrics);
+        }
+    }
+
+    bool evaluate(
+        std::istream &is,
+        std::map<std::string, double> &metrics
+    ) const;
+
+    bool evaluate(
+        const std::string &fname,
+        std::map<std::string, double> &metrics
+    ) const
+    {
+        std::ifstream is(fname);
+        return evaluate(is, metrics);
+    }
+
+    bool save(const std::string &fname) const
+    {
+        return model.save(fname);
+    }
+
+    bool load(const std::string &fname)
+    {
+        return model.load(fname);
     }
 
 private:
@@ -252,6 +377,29 @@ private:
         return get_paths(beams, beams.back().size());
     }
 
+    std::vector<std::string> get_texts(
+        const std::vector<std::vector<Node>> &paths
+    ) const
+    {
+        std::vector<std::string> texts;
+        texts.reserve(paths.size());
+
+        for (auto &path : paths)
+        {
+            std::stringstream ss;
+            for (auto &node : path)
+            {
+                if (node.word != nullptr)
+                {
+                    ss << node.word->text;
+                }
+            }
+            texts.push_back(ss.str());
+        }
+
+        return texts;
+    }
+
     /**
      * 使用提早更新（early update）策略计算最优路径.
      *
@@ -262,6 +410,14 @@ private:
         const std::string &code,
         const std::vector<std::vector<Node>> &dest_beams,
         std::vector<std::vector<Node>> &beams
+    ) const;
+
+    int early_update(
+        const std::string &code,
+        const std::string &text,
+        std::vector<std::map<std::string, double>> &features,
+        std::vector<double> &deltas,
+        double &prob
     ) const;
 
     size_t beam_size;
