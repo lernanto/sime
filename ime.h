@@ -140,21 +140,25 @@ class Decoder
 public:
     struct Node
     {
-        size_t prev;
+        const Node *prev;
         size_t code_pos;
         size_t text_pos;
         std::string code;
         const Word *word;
+        const Node *prev_word;
         std::map<std::string, double> features;
+        std::map<std::string, double> local_features;
         double score;
 
         Node() :
-            prev(0),
+            prev(nullptr),
             code_pos(0),
             text_pos(0),
             code(),
             word(nullptr),
+            prev_word(nullptr),
             features(),
+            local_features(),
             score(0) {}
 
         Node(const Node &other) :
@@ -163,7 +167,9 @@ public:
             text_pos(other.text_pos),
             code(other.code),
             word(other.word),
+            prev_word(nullptr),
             features(other.features),
+            local_features(other.local_features),
             score(other.score) {}
 
         bool operator > (const Node &other) const
@@ -357,9 +363,10 @@ private:
         std::vector<std::vector<Node>> &beams
     ) const;
 
-    std::map<std::string, double> make_features(
-        const std::vector<std::vector<Node>> &beams,
-        size_t idx
+    void make_features(
+        Node &node,
+        const std::string &code,
+        size_t pos
     ) const;
 
     std::vector<std::vector<Node>> get_paths(
