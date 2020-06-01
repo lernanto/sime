@@ -137,13 +137,19 @@ private:
     private:
         explicit Iterator(Node *node = nullptr) : p(node) {}
 
+    public:
         Iterator(const Iterator &other) : p(other.p) {}
 
-    public:
-        Node & operator * () const
+        const Node & operator * () const
         {
             assert(p != nullptr);
             return *p;
+        }
+
+        const Node * operator ->() const
+        {
+            assert(p != nullptr);
+            return p;
         }
 
         bool operator == (const Iterator &other) const
@@ -175,20 +181,14 @@ private:
             return old;
         }
 
-        Node * operator ->() const
-        {
-            assert(p != nullptr);
-            return p;
-        }
-
     private:
-        Node *p;
+        const Node *p;
     };
 
 public:
     Features() : head(nullptr) {}
 
-    Features(Features &other) : head(other.head)
+    Features(const Features &other) : head(other.head)
     {
         Node::incref(head);
     }
@@ -200,18 +200,25 @@ public:
         Node::decref(head);
     }
 
+    Features & operator = (const Features &other)
+    {
+        head = other.head;
+        Node::incref(head);
+        return *this;
+    }
+
     Node & emplace(const std::string &key, int value)
     {
         head = new Node(key, value, head);
         return *head;
     }
 
-    Iterator begin()
+    Iterator begin() const
     {
         return Iterator(head);
     }
 
-    Iterator end()
+    Iterator end() const
     {
         return Iterator();
     }
@@ -301,21 +308,25 @@ class Decoder
 public:
     struct Node
     {
-        size_t prev;
+        const Node *prev;
         size_t code_pos;
         size_t text_pos;
         std::string code;
         const Word *word;
-        std::map<std::string, double> features;
+        const Node *prev_word;
+        Features features;
+        Features local_features;
         double score;
 
         Node() :
-            prev(0),
+            prev(nullptr),
             code_pos(0),
             text_pos(0),
             code(),
             word(nullptr),
+            prev_word(nullptr),
             features(),
+            local_features(),
             score(0) {}
 
         Node(const Node &other) :
@@ -324,7 +335,9 @@ public:
             text_pos(other.text_pos),
             code(other.code),
             word(other.word),
+            prev_word(nullptr),
             features(other.features),
+            local_features(other.local_features),
             score(other.score) {}
 
         bool operator > (const Node &other) const
@@ -518,9 +531,10 @@ private:
         std::vector<std::vector<Node>> &beams
     ) const;
 
-    std::map<std::string, double> make_features(
-        const std::vector<std::vector<Node>> &beams,
-        size_t idx
+    void make_features(
+        Node &node,
+        const std::string &code,
+        size_t pos
     ) const;
 
     std::vector<std::vector<Node>> get_paths(
@@ -586,7 +600,7 @@ private:
     int early_update(
         const std::string &code,
         const std::string &text,
-        std::vector<std::map<std::string, double>> &features,
+        std::vector<Features> &features,
         std::vector<double> &deltas,
         double &prob
     ) const;

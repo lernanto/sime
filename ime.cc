@@ -145,17 +145,16 @@ bool Decoder::advance(
     auto &beam = beams.back();
     beam.reserve(beam_size);
 
-    for (size_t i = 0; i < prev_beam.size(); ++i)
+    for (auto & prev_node : prev_beam)
     {
-        auto &prev_node = prev_beam[i];
-
         // 移进
         beam.emplace_back();
         auto &node = beam.back();
-        node.prev = i;
+        node.prev = &prev_node;
         node.code_pos = prev_node.code_pos;
         node.text_pos = prev_node.text_pos;
-        node.features = make_features(beams, beams.back().size() - 1);
+        node.prev_word = prev_node.prev_word;
+        make_features(node, code, pos);
         node.score = model.score(node.features.begin(), node.features.end());
 
         // 根据编码子串从词典查找匹配得词进行归约
@@ -176,12 +175,13 @@ bool Decoder::advance(
 
                 beam.emplace_back();
                 auto &node = beam.back();
-                node.prev = i;
+                node.prev = &prev_node;
                 node.code_pos = pos;
                 node.text_pos = prev_node.text_pos + word.text.length();
                 node.code = j->first;
                 node.word = &word;
-                node.features = make_features(beams, beams.back().size() - 1);
+                node.prev_word = &node;
+                make_features(node, code, pos);
                 node.score = model.score(node.features.begin(), node.features.end());
             }
         }
@@ -203,39 +203,37 @@ bool Decoder::advance(
     return true;
 }
 
-std::map<std::string, double> Decoder::make_features(
-    const std::vector<std::vector<Node>> &beams,
-    size_t idx
+void Decoder::make_features(
+    Node &node,
+    const std::string &code,
+    size_t pos
 ) const
 {
-    assert(!beams.empty());
-    assert(beams.back().size() > idx);
-
-    auto &node = beams.back()[idx];
-    std::map<std::string, double> features;
-
-    if (node.code_pos < beams.size() - 1)
+    if (node.prev != nullptr)
     {
-        features.emplace("code_len", beams.size() - 1 - node.code_pos);
+        node.local_features = node.prev->local_features;
     }
 
-    const Word *last_word = nullptr;
-    for (auto i = beams.crbegin(); i != beams.crend(); ++i)
+    if (node.word != nullptr)
     {
-        auto &node = (*i)[idx];
-        if (node.word)
+        node.local_features.emplace("unigram:" + node.word->text, 1);
+
+        if ((node.prev != nullptr) && (node.prev->prev_word != nullptr))
         {
-            features.emplace("unigram:" + node.word->text, 1);
-            if (last_word)
-            {
-                features.emplace("bigram:" + node.word->text + "_" + last_word->text, 1);
-            }
-            last_word = node.word;
+            auto prev_word = node.prev->prev_word->word;
+            assert(prev_word != nullptr);
+            node.local_features.emplace(
+                "bigram:" + prev_word->text + "_" + node.word->text,
+                1
+            );
         }
-        idx = node.prev;
     }
 
-    return features;
+    node.features = node.local_features;
+    if (node.code_pos < pos)
+    {
+        node.features.emplace("code_len", pos - node.code_pos);
+    }
 }
 
 std::vector<std::vector<Decoder::Node>> Decoder::get_paths(
@@ -248,18 +246,16 @@ std::vector<std::vector<Decoder::Node>> Decoder::get_paths(
     paths.resize(indeces.size());
     std::vector<size_t> idx(indeces);
 
-    for (auto i = beams.crbegin(); i != beams.crend(); ++i)
+    for (auto & rear : beams.back())
     {
-        for (size_t j = 0; j < paths.size(); ++j)
-        {
-            auto &node = (*i)[idx[j]];
-            paths[j].push_back(node);
-            idx[j] = node.prev;
-        }
-    }
+        paths.emplace_back();
+        auto & path = paths.back();
 
-    for (auto &path : paths)
-    {
+        for (auto p = &rear; p != nullptr; p = p->prev)
+        {
+            path.push_back(*p);
+        }
+
         std::reverse(path.begin(), path.end());
     }
 
@@ -424,7 +420,7 @@ size_t Decoder::early_update(
     {
         advance(code, "", pos, beam_size, beams);
 
-        bool hit = false;
+        bool found = false;
         for (size_t i = 0; i < paths.size(); ++i)
         {
             indeces[i] = beam_size;
@@ -432,18 +428,18 @@ size_t Decoder::early_update(
             {
                 for (size_t j = 0; j < beams[pos].size(); ++j)
                 {
-                    if ((prev_indeces[i] == beams[pos][j].prev)
-                        && (paths[i][pos].word == beams[pos][j].word))
+                    if ((beams[pos][j].prev == &beams[pos - 1][prev_indeces[i]])
+                        && (beams[pos][j].word == paths[i][pos].word))
                     {
                         indeces[i] = j;
-                        hit = true;
+                        found = true;
                         break;
                     }
                 }
             }
         }
 
-        if (!hit)
+        if (!found)
         {
             // 目标路径全部掉出搜索范围，提前返回结果
             // 查找祖先节点还在搜索范围内的第一条路径
@@ -455,7 +451,7 @@ size_t Decoder::early_update(
             assert(i < paths.size());
 
             beams[pos].push_back(paths[i][pos]);
-            beams[pos].back().prev = prev_indeces[i];
+            beams[pos].back().prev = &beams[pos - 1][prev_indeces[i]];
             DEBUG << "label = " << beam_size << std::endl;
             return beam_size;
         }
@@ -477,7 +473,7 @@ size_t Decoder::early_update(
 int Decoder::early_update(
     const std::string &code,
     const std::string &text,
-    std::vector<std::map<std::string, double>> &features,
+    std::vector<Features> &features,
     std::vector<double> &deltas,
     double &prob
 ) const
@@ -550,7 +546,7 @@ bool Decoder::update(
     double &prob
 )
 {
-    std::vector<std::map<std::string, double>> features;
+    std::vector<Features> features;
     std::vector<double> deltas;
     index = early_update(code, text, features, deltas, prob);
     if (index >= 0)
@@ -576,7 +572,7 @@ bool Decoder::update(
     assert(codes.size() == texts.size());
 
     auto batch_size = codes.size();
-    std::vector<std::vector<std::map<std::string, double>>> batch_features(batch_size);
+    std::vector<std::vector<Features>> batch_features(batch_size);
     std::vector<std::vector<double>> batch_deltas(batch_size);
     indeces.resize(batch_size);
     probs.resize(batch_size);

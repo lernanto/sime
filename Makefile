@@ -2,7 +2,7 @@ CC := g++ -c
 LD := g++
 INCLUDES += -I.
 LIBS +=
-# CFLAGS := $(INCLUDES) -g -O0
+# CFLAGS := $(INCLUDES) -g -O0 -DLOG_LEVEL=LOG_VERBOSE
 CFLAGS := $(INCLUDES) -O3 -DNDEBUG=1 -fopenmp
 LDFLAGS := -fopenmp
 
