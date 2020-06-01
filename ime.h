@@ -141,21 +141,28 @@ class Decoder
 public:
     struct Node
     {
-        size_t prev;
+        /// 指向路径中前一个节点
+        const Node *prev;
         size_t code_pos;
         size_t text_pos;
         std::string code;
         const Word *word;
+        /// 指向路径中前一个有词的节点，用于构造 n-gram 特征
+        const Node *prev_word;
         std::map<std::string, double> features;
+        /// 用于暂存路径的局部特征，由于每条路径的特征都是子路径局部特征的超集，可以加快构造特征的过程
+        std::map<std::string, double> local_features;
         double score;
 
         Node() :
-            prev(0),
+            prev(nullptr),
             code_pos(0),
             text_pos(0),
             code(),
             word(nullptr),
+            prev_word(nullptr),
             features(),
+            local_features(),
             score(0) {}
 
         Node(const Node &other) :
@@ -164,7 +171,9 @@ public:
             text_pos(other.text_pos),
             code(other.code),
             word(other.word),
+            prev_word(nullptr),
             features(other.features),
+            local_features(other.local_features),
             score(other.score) {}
 
         bool operator > (const Node &other) const
@@ -347,9 +356,10 @@ private:
         std::vector<std::vector<Node>> &beams
     ) const;
 
-    std::map<std::string, double> make_features(
-        const std::vector<std::vector<Node>> &beams,
-        size_t idx
+    void make_features(
+        Node &node,
+        const std::string &code,
+        size_t pos
     ) const;
 
     std::vector<std::vector<Node>> get_paths(
