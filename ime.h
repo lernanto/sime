@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <utility>
 #include <unordered_map>
 #include <iostream>
 #include <fstream>
@@ -59,6 +60,50 @@ private:
     std::multimap<std::string, Word> data;
 };
 
+struct Node
+{
+    /// 指向路径中前一个节点
+    const Node *prev;
+    size_t code_pos;
+    size_t text_pos;
+    std::string code;
+    const Word *word;
+    /// 指向路径中前一个有词的节点，用于构造 n-gram 特征
+    const Node *prev_word;
+    /// 局部特征，对经过节点的所有路径都生效的特征保存在这里
+    std::vector<std::pair<std::string, double>> local_features;
+    /// 全局特征，描述整条路径的特征，只有当节点是路径的最后一个节点才生效
+    std::vector<std::pair<std::string, double>> global_features;
+    double score;
+
+    Node() :
+        prev(nullptr),
+        code_pos(0),
+        text_pos(0),
+        code(),
+        word(nullptr),
+        prev_word(nullptr),
+        local_features(),
+        global_features(),
+        score(0) {}
+
+    Node(const Node &other) :
+        prev(other.prev),
+        code_pos(other.code_pos),
+        text_pos(other.text_pos),
+        code(other.code),
+        word(other.word),
+        prev_word(nullptr),
+        local_features(other.local_features),
+        global_features(other.global_features),
+        score(other.score) {}
+
+    bool operator > (const Node &other) const
+    {
+        return score > other.score;
+    }
+};
+
 class Model
 {
 public:
@@ -91,6 +136,34 @@ public:
             if (iter != weights.cend())
             {
                 sum += i->second * iter->second;
+            }
+        }
+
+        return sum;
+    }
+
+    double score(const Node &node) const
+    {
+        double sum = 0;
+
+        for (auto p = &node; p != nullptr; p = p->prev)
+        {
+            for (auto &f : p->local_features)
+            {
+                auto iter = weights.find(f.first);
+                if (iter != weights.cend())
+                {
+                    sum += f.second * iter->second;
+                }
+            }
+        }
+
+        for (auto &f : node.global_features)
+        {
+            auto iter = weights.find(f.first);
+            if (iter != weights.cend())
+            {
+                sum += f.second * iter->second;
             }
         }
 
@@ -131,6 +204,37 @@ public:
         }
     }
 
+    void update(const Node &node, double delta)
+    {
+        for (auto p = &node; p != nullptr; p = p->prev)
+        {
+            for (auto &f : p->local_features)
+            {
+                DEBUG << f.first << ':' << weights[f.first]
+                    << " + " << f.second << " * " << delta << " * " << learning_rate
+                    << " = " << weights[f.first] + f.second * delta * learning_rate << std::endl;
+                weights[f.first] += f.second * delta * learning_rate;
+            }
+        }
+
+        for (auto &f : node.global_features)
+        {
+            DEBUG << f.first << ':' << weights[f.first]
+                << " + " << f.second << " * " << delta << " * " << learning_rate
+                << " = " << weights[f.first] + f.second * delta * learning_rate << std::endl;
+            weights[f.first] += f.second * delta * learning_rate;
+        }
+    }
+
+    void update(const std::vector<Node> &beam, const std::vector<double> &deltas)
+    {
+        assert(beam.size() == deltas.size());
+        for (size_t i = 0; i < beam.size(); ++i)
+        {
+            update(beam[i], deltas[i]);
+        }
+    }
+
 private:
     std::unordered_map<std::string, double> weights;
     double learning_rate;
@@ -138,50 +242,6 @@ private:
 
 class Decoder
 {
-public:
-    struct Node
-    {
-        /// 指向路径中前一个节点
-        const Node *prev;
-        size_t code_pos;
-        size_t text_pos;
-        std::string code;
-        const Word *word;
-        /// 指向路径中前一个有词的节点，用于构造 n-gram 特征
-        const Node *prev_word;
-        std::map<std::string, double> features;
-        /// 用于暂存路径的局部特征，由于每条路径的特征都是子路径局部特征的超集，可以加快构造特征的过程
-        std::map<std::string, double> local_features;
-        double score;
-
-        Node() :
-            prev(nullptr),
-            code_pos(0),
-            text_pos(0),
-            code(),
-            word(nullptr),
-            prev_word(nullptr),
-            features(),
-            local_features(),
-            score(0) {}
-
-        Node(const Node &other) :
-            prev(other.prev),
-            code_pos(other.code_pos),
-            text_pos(other.text_pos),
-            code(other.code),
-            word(other.word),
-            prev_word(nullptr),
-            features(other.features),
-            local_features(other.local_features),
-            score(other.score) {}
-
-        bool operator > (const Node &other) const
-        {
-            return score > other.score;
-        }
-    };
-
 public:
     Decoder(
         const Dictionary &dict_,
@@ -425,7 +485,7 @@ private:
     int early_update(
         const std::string &code,
         const std::string &text,
-        std::vector<std::map<std::string, double>> &features,
+        std::vector<std::vector<Node>> &beams,
         std::vector<double> &deltas,
         double &prob
     ) const;
