@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <utility>
 #include <unordered_map>
 #include <iostream>
 #include <fstream>
@@ -233,6 +234,99 @@ private:
     Node *head;
 };
 
+struct Node
+{
+    const Node *prev;
+    size_t code_pos;
+    size_t text_pos;
+    std::string code;
+    const Word *word;
+    const Node *prev_word;
+    std::vector<std::pair<std::string, double>> local_features;
+    std::vector<std::pair<std::string, double>> global_features;
+    double score;
+
+    Node() :
+        prev(nullptr),
+        code_pos(0),
+        text_pos(0),
+        code(),
+        word(nullptr),
+        prev_word(nullptr),
+        local_features(),
+        global_features(),
+        score(0) {}
+
+    Node(const Node &other) :
+        prev(other.prev),
+        code_pos(other.code_pos),
+        text_pos(other.text_pos),
+        code(other.code),
+        word(other.word),
+        prev_word(nullptr),
+        local_features(other.local_features),
+        global_features(other.global_features),
+        score(other.score) {}
+
+    bool operator > (const Node &other) const
+    {
+        return score > other.score;
+    }
+};
+
+class Iterator
+{
+private:
+    explicit Iterator(Node *node = nullptr) : p(node) {}
+
+public:
+    Iterator(const Iterator &other) : p(other.p) {}
+
+    const Node & operator * () const
+    {
+        assert(p != nullptr);
+        return *p;
+    }
+
+    const Node * operator ->() const
+    {
+        assert(p != nullptr);
+        return p;
+    }
+
+    bool operator == (const Iterator &other) const
+    {
+        return p == other.p;
+    }
+
+    bool operator != (const Iterator &other) const
+    {
+        return p != other.p;
+    }
+
+    Iterator & operator ++ ()
+    {
+        if (p != nullptr)
+        {
+            p = p->prev;
+        }
+        return *this;
+    }
+
+    Iterator operator ++ (int)
+    {
+        Iterator old(*this);
+        if (p != nullptr)
+        {
+            p = p->prev;
+        }
+        return old;
+    }
+
+private:
+    const Node *p;
+};
+
 class Model
 {
 public:
@@ -264,6 +358,32 @@ public:
             auto iter = weights.find(i->first);
             if (iter != weights.cend()) {
                 sum += i->second * iter->second;
+            }
+        }
+
+        return sum;
+    }
+
+    double score(const Node &node) const
+    {
+        double sum = 0;
+
+        for (auto p = &node; p != nullptr; p = p->prev)
+        {
+            for (auto &f : p->local_features)
+            {
+                auto iter = weights.find(f.first);
+                if (iter != weights.cend()) {
+                    sum += f.second * iter->second;
+                }
+            }
+        }
+
+        for (auto &f : node.global_features)
+        {
+            auto iter = weights.find(f.first);
+            if (iter != weights.cend()) {
+                sum += f.second * iter->second;
             }
         }
 
@@ -304,6 +424,52 @@ public:
         }
     }
 
+    void update(const Node &node, double delta)
+    {
+        if (LOG_LEVEL <= LOG_DEBUG)
+        {
+            DEBUG << "update: ";
+            for (auto p = &node; p != nullptr; p = p->prev)
+            {
+                for (auto &f : p->local_features)
+                {
+                    DEBUG << f.first << ':' << f.second << ',';
+                }
+            }
+            for (auto &f : node.global_features)
+            {
+                DEBUG << f.first << ':' << f.second << ',';
+            }
+            DEBUG << " +" << delta << '*' << learning_rate << std::endl;
+        }
+
+        for (auto p = &node; p != nullptr; p = p->prev)
+        {
+            for (auto &f : p->local_features)
+            {
+                DEBUG << f.first << ':' << weights[f.first] << " + " << f.second << '*' << delta << '*' << learning_rate;
+                weights[f.first] += f.second * delta * learning_rate;
+                DEBUG << " = " << weights[f.first] << std::endl;
+            }
+        }
+
+        for (auto &f : node.global_features)
+        {
+            DEBUG << f.first << ':' << weights[f.first] << " + " << f.second << '*' << delta << '*' << learning_rate;
+            weights[f.first] += f.second * delta * learning_rate;
+            DEBUG << " = " << weights[f.first] << std::endl;
+        }
+    }
+
+    void update(const std::vector<Node> &beam, const std::vector<double> &deltas)
+    {
+        assert(beam.size() == deltas.size());
+        for (size_t i = 0; i < beam.size(); ++i)
+        {
+            update(beam[i], deltas[i]);
+        }
+    }
+
 private:
     std::unordered_map<std::string, double> weights;
     double learning_rate;
@@ -311,47 +477,6 @@ private:
 
 class Decoder
 {
-public:
-    struct Node
-    {
-        const Node *prev;
-        size_t code_pos;
-        size_t text_pos;
-        std::string code;
-        const Word *word;
-        const Node *prev_word;
-        Features features;
-        Features local_features;
-        double score;
-
-        Node() :
-            prev(nullptr),
-            code_pos(0),
-            text_pos(0),
-            code(),
-            word(nullptr),
-            prev_word(nullptr),
-            features(),
-            local_features(),
-            score(0) {}
-
-        Node(const Node &other) :
-            prev(other.prev),
-            code_pos(other.code_pos),
-            text_pos(other.text_pos),
-            code(other.code),
-            word(other.word),
-            prev_word(nullptr),
-            features(other.features),
-            local_features(other.local_features),
-            score(other.score) {}
-
-        bool operator > (const Node &other) const
-        {
-            return score > other.score;
-        }
-    };
-
 public:
     Decoder(
         const Dictionary &dict_,
@@ -606,7 +731,7 @@ private:
     int early_update(
         const std::string &code,
         const std::string &text,
-        std::vector<Features> &features,
+        std::vector<std::vector<Node>> &beams,
         std::vector<double> &deltas,
         double &prob
     ) const;
