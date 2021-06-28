@@ -111,6 +111,8 @@ private:
         {
             if (node != nullptr)
             {
+                assert(node->ref > 0);
+
                 auto ref = --node->ref;
                 VERBOSE << "decrease reference: key = " << node->first
                     << ", value = " << node->second
@@ -143,12 +145,14 @@ private:
         const Node & operator * () const
         {
             assert(p != nullptr);
+            assert(p->ref > 0);
             return *p;
         }
 
         const Node * operator ->() const
         {
             assert(p != nullptr);
+            assert(p->ref > 0);
             return p;
         }
 
@@ -166,6 +170,7 @@ private:
         {
             if (p != nullptr)
             {
+                assert(p->ref > 0);
                 p = p->next;
             }
             return *this;
@@ -176,6 +181,7 @@ private:
             Iterator old(*this);
             if (p != nullptr)
             {
+                assert(p->ref > 0);
                 p = p->next;
             }
             return old;
@@ -267,7 +273,7 @@ public:
     template<typename Iterator>
     void update(Iterator begin, Iterator end, double delta)
     {
-        if (LOG_LEVEL == LOG_DEBUG)
+        if (LOG_LEVEL <= LOG_DEBUG)
         {
             DEBUG << "update: ";
             for (auto i = begin; i != end; ++i)

@@ -89,7 +89,7 @@ bool Decoder::decode(
         }
     }
 
-    if (LOG_LEVEL == LOG_DEBUG)
+    if (LOG_LEVEL <= LOG_DEBUG)
     {
         auto paths = get_paths(beams);
         output_paths(std::cerr, code, paths);
@@ -153,11 +153,11 @@ bool Decoder::advance(
         node.prev = &prev_node;
         node.code_pos = prev_node.code_pos;
         node.text_pos = prev_node.text_pos;
-        node.prev_word = prev_node.prev_word;
+        node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
         make_features(node, code, pos);
         node.score = model.score(node.features.begin(), node.features.end());
 
-        // 根据编码子串从词典查找匹配得词进行归约
+        // 根据编码子串从词典查找匹配的词进行归约得
         auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);
         VERBOSE << "code = " << subcode << std::endl;
         std::multimap<std::string, Word>::const_iterator begin;
@@ -180,7 +180,7 @@ bool Decoder::advance(
                 node.text_pos = prev_node.text_pos + word.text.length();
                 node.code = j->first;
                 node.word = &word;
-                node.prev_word = &node;
+                node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
                 make_features(node, code, pos);
                 node.score = model.score(node.features.begin(), node.features.end());
             }
@@ -243,15 +243,14 @@ std::vector<std::vector<Decoder::Node>> Decoder::get_paths(
     assert(!beams.empty());
 
     std::vector<std::vector<Node>> paths;
-    paths.resize(indeces.size());
-    std::vector<size_t> idx(indeces);
+    paths.reserve(indeces.size());
 
-    for (auto & rear : beams.back())
+    for (auto i : indeces)
     {
         paths.emplace_back();
         auto & path = paths.back();
 
-        for (auto p = &rear; p != nullptr; p = p->prev)
+        for (auto p = &beams.back()[i]; p != nullptr; p = p->prev)
         {
             path.push_back(*p);
         }
@@ -291,6 +290,8 @@ std::ostream & Decoder::output_paths(
         }
         os << std::endl;
     }
+
+    return os;
 }
 
 bool Decoder::train(std::istream &is, std::map<std::string, double> &metrics)
@@ -468,6 +469,10 @@ size_t Decoder::early_update(
             return prev_indeces[i];
         }
     }
+
+    // 不会到达这里
+    assert(false);
+    return 0;
 }
 
 int Decoder::early_update(
