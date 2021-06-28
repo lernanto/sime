@@ -163,7 +163,7 @@ bool Decoder::advance(
         node.text_pos = prev_node.text_pos;
         node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
         make_features(node, code, pos);
-        node.score = model.score(node.features.begin(), node.features.end());
+        node.score = model.score(node);
 
         // 根据编码子串从词典查找匹配的词进行归约
         auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);
@@ -191,7 +191,7 @@ bool Decoder::advance(
                 node.word = &word;
                 node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
                 make_features(node, code, pos);
-                node.score = model.score(node.features.begin(), node.features.end());
+                node.score = model.score(node);
             }
         }
     }
@@ -218,37 +218,30 @@ void Decoder::make_features(
     size_t pos
 ) const
 {
-    // 路径的特征是其子路径局部特征的超集
-    if (node.prev != nullptr)
-    {
-        node.local_features = node.prev->local_features;
-    }
-
     if (node.word != nullptr)
     {
-        node.local_features.emplace("unigram:" + node.word->text, 1);
+        node.local_features.push_back(std::make_pair("unigram:" + node.word->text, 1));
 
         if (node.prev_word != nullptr)
         {
             // 回溯前一个词，构造 bigram
             assert(node.prev_word->word != nullptr);
             assert(!node.prev_word->word->text.empty());
-            node.local_features.emplace(
+            node.local_features.push_back(std::make_pair(
                 "bigram:" + node.prev_word->word->text + "_" + node.word->text,
                 1
-            );
+            ));
         }
     }
 
-    node.features = node.local_features;
-    // 当前未匹配编码长度是全局特征，需要特殊处理
+    // 当前未匹配编码长度
     if (node.code_pos < pos)
     {
-        node.features.emplace("code_len", pos - node.code_pos);
+        node.global_features.push_back(std::make_pair("code_len", pos - node.code_pos));
     }
 }
 
-std::vector<std::vector<Decoder::Node>> Decoder::get_paths(
+std::vector<std::vector<Node>> Decoder::get_paths(
     const std::vector<std::vector<Node>> &beams,
     const std::vector<size_t> &indeces
 ) const {
@@ -296,9 +289,16 @@ std::ostream & Decoder::output_paths(
 
         os << code.substr(rear.code_pos, paths[i].size() - 1 - rear.code_pos) << ' ';
 
-        for (auto &i : rear.features)
+        for (auto p = &rear; p != nullptr; p = p->prev)
         {
-            os << i.first << ':' << i.second << ',';
+            for (auto &f : p->local_features)
+            {
+                os << f.first << ':' << f.second << ',';
+            }
+        }
+        for (auto &f : rear.global_features)
+        {
+            os << f.first << ':' << f.second << ',';
         }
         os << std::endl;
     }
@@ -505,7 +505,7 @@ size_t Decoder::early_update(
 int Decoder::early_update(
     const std::string &code,
     const std::string &text,
-    std::vector<std::map<std::string, double>> &features,
+    std::vector<std::vector<Node>> &beams,
     std::vector<double> &deltas,
     double &prob
 ) const
@@ -545,7 +545,6 @@ int Decoder::early_update(
     }
 
     auto paths = get_paths(dest_beams, indeces);
-    std::vector<std::vector<Node>> beams;
     auto label = early_update(code, paths, beams);
 
     // 计算各路径梯度
@@ -565,7 +564,6 @@ int Decoder::early_update(
             prob = p;
             delta += 1;
         }
-        features.push_back(std::move(node.features));
         deltas.push_back(delta);
     }
 
@@ -579,13 +577,13 @@ bool Decoder::update(
     double &prob
 )
 {
-    std::vector<std::map<std::string, double>> features;
+    std::vector<std::vector<Node>> beams;
     std::vector<double> deltas;
-    index = early_update(code, text, features, deltas, prob);
+    index = early_update(code, text, beams, deltas, prob);
     if (index >= 0)
     {
-        assert(features.size() == deltas.size());
-        model.update(features, deltas);
+        assert(beams.back().size() == deltas.size());
+        model.update(beams.back(), deltas);
         return true;
     }
     else
@@ -605,7 +603,7 @@ bool Decoder::update(
     assert(codes.size() == texts.size());
 
     auto batch_size = codes.size();
-    std::vector<std::vector<std::map<std::string, double>>> batch_features(batch_size);
+    std::vector<std::vector<std::vector<Node>>> batch_beams(batch_size);
     std::vector<std::vector<double>> batch_deltas(batch_size);
     indeces.resize(batch_size);
     probs.resize(batch_size);
@@ -617,7 +615,7 @@ bool Decoder::update(
         indeces[i] = early_update(
             codes[i],
             texts[i],
-            batch_features[i],
+            batch_beams[i],
             batch_deltas[i],
             probs[i]
         );
@@ -628,7 +626,8 @@ bool Decoder::update(
     {
         if (indeces[i] >= 0)
         {
-            model.update(batch_features[i], batch_deltas[i]);
+            assert(batch_beams[i].back().size() == batch_deltas[i].size());
+            model.update(batch_beams[i].back(), batch_deltas[i]);
         }
     }
 
