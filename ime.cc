@@ -336,11 +336,23 @@ bool Decoder::train(std::istream &is, std::map<std::string, double> &metrics)
         }
     }
 
+    double success = static_cast<double>(succ) / count;
+    double precision = static_cast<double>(prec) / succ;
+    loss /= succ;
+    double early_update_rate = static_cast<double>(eu) / succ;
+
+    INFO << "count = " << count
+        << ", success rate = " << success
+        << ", precision = " << precision
+        << ", loss = " << loss
+        << ", early update rate = " << early_update_rate << std::endl;
+
     metrics.emplace("count", count);
-    metrics.emplace("success rate", static_cast<double>(succ) / count);
-    metrics.emplace("precision", static_cast<double>(prec) / succ);
-    metrics.emplace("loss", loss / succ);
-    metrics.emplace("early update rate", static_cast<double>(eu) / succ);
+    metrics.emplace("success rate", success);
+    metrics.emplace("precision", precision);
+    metrics.emplace("loss", loss);
+    metrics.emplace("early update rate", early_update_rate);
+
     return true;
 }
 
@@ -410,7 +422,7 @@ bool Decoder::train(
         }
     }
 
-    double success = static_cast<double>(succ) / succ;
+    double success = static_cast<double>(succ) / count;
     double precision = static_cast<double>(prec) / succ;
     loss /= succ;
     double early_update_rate = static_cast<double>(eu) / succ;
