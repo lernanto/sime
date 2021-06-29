@@ -226,7 +226,9 @@ void Decoder::make_features(
 
     if (node.code_pos < pos)
     {
-        node.global_features.push_back(std::make_pair("code_len", pos - node.code_pos));
+        std::stringstream ss;
+        ss << "code_len:" << pos - node.code_pos;
+        node.global_features.push_back(std::make_pair(ss.str(), 1));
     }
 }
 
