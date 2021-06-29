@@ -304,30 +304,35 @@ bool Decoder::train(std::istream &is, std::map<std::string, double> &metrics)
         std::stringstream ss(line);
         ss >> code >> text;
 
-        int index;
-        double prob;
-        if (update(code, text, index, prob))
+        if (!code.empty() && !text.empty())
         {
-            ++succ;
-            if (index >= beam_size)
-            {
-                ++eu;
-            }
-            if (index == 0)
-            {
-                ++prec;
-            }
-            loss += -log(prob);
-        }
+            DEBUG << "train sample code = " << code << ", text = " << text << std::endl;
 
-        ++count;
-        if (count % 1000 == 0)
-        {
-            INFO << count
-                <<": success rate = " << static_cast<double>(succ) / count
-                << ", precesion = " << static_cast<double>(prec) / succ
-                << ", loss = " << loss / succ
-                << ", early update rate = " << static_cast<double>(eu) / succ << std::endl;
+            int index;
+            double prob;
+            if (update(code, text, index, prob))
+            {
+                ++succ;
+                if (index >= beam_size)
+                {
+                    ++eu;
+                }
+                if (index == 0)
+                {
+                    ++prec;
+                }
+                loss += -log(prob);
+            }
+
+            ++count;
+            if (count % 1000 == 0)
+            {
+                INFO << count
+                    <<": success rate = " << static_cast<double>(succ) / count
+                    << ", precesion = " << static_cast<double>(prec) / succ
+                    << ", loss = " << loss / succ
+                    << ", early update rate = " << static_cast<double>(eu) / succ << std::endl;
+            }
         }
     }
 
@@ -364,32 +369,40 @@ bool Decoder::train(
         std::stringstream ss(line);
         ss >> code >> text;
 
-        codes.push_back(std::move(code));
-        texts.push_back(std::move(text));
-
-        if (codes.size() >= batch_size)
+        if (!code.empty() && !text.empty())
         {
-            if (update(codes, texts, succ, prec, loss, eu))
-            {
-                ++batch;
-                count += codes.size();
-                if (batch % 100 == 0)
-                {
-                    INFO << batch
-                        << ": success rate = " << static_cast<double>(succ) / count
-                        << ", precision = " << static_cast<double>(prec) / succ
-                        << ", loss = " << loss / succ
-                        << ", early update rate = " << static_cast<double>(eu) / succ << std::endl;
-                }
-            }
+            DEBUG << "train sample code = " << code << ", text = " << text << std::endl;
 
-            codes.clear();
-            texts.clear();
+            codes.push_back(std::move(code));
+            texts.push_back(std::move(text));
+
+            if (codes.size() >= batch_size)
+            {
+                assert(codes.size() == texts.size());
+
+                if (update(codes, texts, succ, prec, loss, eu))
+                {
+                    ++batch;
+                    count += codes.size();
+                    if (batch % 100 == 0)
+                    {
+                        INFO << batch
+                            << ": success rate = " << static_cast<double>(succ) / count
+                            << ", precision = " << static_cast<double>(prec) / succ
+                            << ", loss = " << loss / succ
+                            << ", early update rate = " << static_cast<double>(eu) / succ << std::endl;
+                    }
+                }
+
+                codes.clear();
+                texts.clear();
+            }
         }
     }
 
     if (!codes.empty())
     {
+        assert(codes.size() == texts.size());
         if (update(codes, texts, succ, prec, loss, eu))
         {
             ++batch;
@@ -664,62 +677,67 @@ bool Decoder::evaluate(
     size_t prec = 0;
     size_t inbeam = 0;
     double loss = 0;
-    std::string line;
-    std::string code;
-    std::string text;
 
     while (!is.eof())
     {
+        std::string line;
+        std::string code;
+        std::string text;
         std::getline(is, line);
         std::stringstream ss(line);
         ss >> code >> text;
 
-        ++count;
-        std::vector<std::string> texts;
-        std::vector<double> probs;
-        if (predict(code, texts, probs))
+        if (!code.empty() && !text.empty())
         {
-            assert(!texts.empty());
-            assert(!probs.empty());
-            assert(texts.size() == probs.size());
+            DEBUG << "evaluation sample code = " << code << ", text = " << text << std::endl;
 
-            ++succ;
-            if (texts.front() == text)
+            ++count;
+            std::vector<std::string> texts;
+            std::vector<double> probs;
+            if (predict(code, texts, probs))
             {
-                ++prec;
-            }
+                assert(!texts.empty());
+                assert(!probs.empty());
+                assert(texts.size() == probs.size());
 
-            size_t i = 0;
-            while ((texts[i] != text) && (i < texts.size()))
-            {
-                ++i;
-            }
-
-            if (i < texts.size())
-            {
-                ++inbeam;
-                loss -= log(probs[i]);
-            }
-            else
-            {
-                std::vector<std::vector<Node>> beams;
-                decode(code, beams);
-                assert(!beams.empty());
-                assert(!beams.back().empty());
-
-                double sum = 0;
-                for (auto &node : beams.back())
+                ++succ;
+                if (texts.front() == text)
                 {
-                    sum += exp(node.score);
+                    ++prec;
                 }
 
-                beams.clear();
-                if (decode(code, text, beams))
+                size_t i = 0;
+                while ((texts[i] != text) && (i < texts.size()))
                 {
+                    ++i;
+                }
+
+                if (i < texts.size())
+                {
+                    ++inbeam;
+                    loss -= log(probs[i]);
+                }
+                else
+                {
+                    std::vector<std::vector<Node>> beams;
+                    decode(code, beams);
                     assert(!beams.empty());
                     assert(!beams.back().empty());
-                    sum += exp(beams.back().front().score);
-                    loss += log(sum) - beams.back().front().score;
+
+                    double sum = 0;
+                    for (auto &node : beams.back())
+                    {
+                        sum += exp(node.score);
+                    }
+
+                    beams.clear();
+                    if (decode(code, text, beams))
+                    {
+                        assert(!beams.empty());
+                        assert(!beams.back().empty());
+                        sum += exp(beams.back().front().score);
+                        loss += log(sum) - beams.back().front().score;
+                    }
                 }
             }
         }
