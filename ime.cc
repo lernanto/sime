@@ -278,17 +278,7 @@ std::ostream & Decoder::output_paths(
 
         os << code.substr(rear.code_pos, paths[i].size() - 1 - rear.code_pos) << ' ';
 
-        for (auto p = &rear; p != nullptr; p = p->prev)
-        {
-            for (auto &f : p->local_features)
-            {
-                os << f.first << ':' << f.second << ',';
-            }
-        }
-        for (auto &f : rear.global_features)
-        {
-            os << f.first << ':' << f.second << ',';
-        }
+        model.output_score(os, rear);
         os << std::endl;
     }
 
@@ -454,7 +444,7 @@ size_t Decoder::early_update(
 
             beams[pos].push_back(paths[i][pos]);
             beams[pos].back().prev = &beams[pos - 1][prev_indeces[i]];
-            DEBUG << "label = " << beam_size << std::endl;
+            DEBUG << "early update label = " << beam_size << std::endl;
             return beam_size;
         }
 
@@ -513,6 +503,7 @@ int Decoder::early_update(
 
         if (indeces.empty())
         {
+            DEBUG << "no match code = " << code << ", text = " << text << std::endl;
             return -1;
         }
     }

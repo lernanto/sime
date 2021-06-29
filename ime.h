@@ -426,6 +426,7 @@ public:
 
     void update(const Node &node, double delta)
     {
+#if 0
         if (LOG_LEVEL <= LOG_DEBUG)
         {
             DEBUG << "update: ";
@@ -442,22 +443,25 @@ public:
             }
             DEBUG << " +" << delta << '*' << learning_rate << std::endl;
         }
+#endif
 
         for (auto p = &node; p != nullptr; p = p->prev)
         {
             for (auto &f : p->local_features)
             {
-                DEBUG << f.first << ':' << weights[f.first] << " + " << f.second << '*' << delta << '*' << learning_rate;
+                DEBUG << f.first << ':' << weights[f.first]
+                    << " + " << f.second << " * " << delta << " * " << learning_rate
+                    << " = " << weights[f.first] + f.second * delta * learning_rate << std::endl;
                 weights[f.first] += f.second * delta * learning_rate;
-                DEBUG << " = " << weights[f.first] << std::endl;
             }
         }
 
         for (auto &f : node.global_features)
         {
-            DEBUG << f.first << ':' << weights[f.first] << " + " << f.second << '*' << delta << '*' << learning_rate;
+            DEBUG << f.first << ':' << weights[f.first]
+                << " + " << f.second << " * " << delta << " * " << learning_rate
+                << " = " << weights[f.first] + f.second * delta * learning_rate << std::endl;
             weights[f.first] += f.second * delta * learning_rate;
-            DEBUG << " = " << weights[f.first] << std::endl;
         }
     }
 
@@ -468,6 +472,27 @@ public:
         {
             update(beam[i], deltas[i]);
         }
+    }
+
+    std::ostream & output_score(std::ostream &os, const Node &node) const
+    {
+        for (auto p = &node; p != nullptr; p = p->prev)
+        {
+            for (auto &f : p->local_features)
+            {
+                os << f.first << ':' << f.second << " * ";
+                auto iter = weights.find(f.first);
+                os << ((iter != weights.cend()) ? iter->second : 0) << " + ";
+            }
+        }
+        for (auto &f : node.global_features)
+        {
+            os << f.first << ':' << f.second << " * ";
+            auto iter = weights.find(f.first);
+            os << ((iter != weights.cend()) ? iter->second : 0) << " + ";
+        }
+
+        return os;
     }
 
 private:
