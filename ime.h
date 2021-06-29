@@ -330,8 +330,10 @@ public:
     bool update(
         const std::vector<std::string> &codes,
         const std::vector<std::string> &texts,
-        double &precision,
-        double &loss
+        size_t &success,
+        size_t &precision,
+        double &loss,
+        size_t &early_update_count
     );
 
     std::vector<std::string> predict(const std::string &code, size_t num = 1) const

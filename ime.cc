@@ -301,8 +301,10 @@ std::ostream & Decoder::output_paths(
 bool Decoder::train(std::istream &is, std::map<std::string, double> &metrics)
 {
     size_t count = 0;
+    size_t succ = 0;
     size_t prec = 0;
     double loss = 0;
+    size_t eu = 0;
 
     while (!is.eof())
     {
@@ -322,25 +324,47 @@ bool Decoder::train(std::istream &is, std::map<std::string, double> &metrics)
             double prob;
             if (update(code, text, index, prob))
             {
-                ++count;
+                ++succ;
+                if (index >= beam_size)
+                {
+                    ++eu;
+                }
                 if (index == 0)
                 {
                     ++prec;
                 }
                 loss += -log(prob);
+            }
 
-                if (count % 1000 == 0)
-                {
-                    INFO << count
-                        << ": precesion = " << static_cast<double>(prec) / count
-                        << ", loss = " << loss / count << std::endl;
-                }
+            ++count;
+            if (count % 1000 == 0)
+            {
+                INFO << count
+                    <<": success rate = " << static_cast<double>(succ) / count
+                    << ", precesion = " << static_cast<double>(prec) / succ
+                    << ", loss = " << loss / succ
+                    << ", early update rate = " << static_cast<double>(eu) / succ << std::endl;
             }
         }
     }
 
-    metrics.emplace("precision", static_cast<double>(prec) / count);
-    metrics.emplace("loss", loss / count);
+    double success = static_cast<double>(succ) / count;
+    double precision = static_cast<double>(prec) / succ;
+    loss /= succ;
+    double early_update_rate = static_cast<double>(eu) / succ;
+
+    INFO << "count = " << count
+        << ", success rate = " << success
+        << ", precision = " << precision
+        << ", loss = " << loss
+        << ", early update rate = " << early_update_rate << std::endl;
+
+    metrics.emplace("count", count);
+    metrics.emplace("success rate", success);
+    metrics.emplace("precision", precision);
+    metrics.emplace("loss", loss);
+    metrics.emplace("early update rate", early_update_rate);
+
     return true;
 }
 
@@ -351,8 +375,11 @@ bool Decoder::train(
 )
 {
     size_t batch = 0;
-    double precision = 0;
+    size_t count = 0;
+    size_t succ = 0;
+    size_t prec = 0;
     double loss = 0;
+    size_t eu = 0;
     std::vector<std::string> codes;
     std::vector<std::string> texts;
 
@@ -377,24 +404,22 @@ bool Decoder::train(
             {
                 assert(codes.size() == texts.size());
 
-                double prec;
-                double l;
-                if (update(codes, texts, prec, l))
+                if (update(codes, texts, succ, prec, loss, eu))
                 {
                     ++batch;
-                    precision += prec;
-                    loss += l;
-
+                    count += codes.size();
                     if (batch % 100 == 0)
                     {
                         INFO << batch
-                            << ": precision = " << precision / batch
-                            << ", loss = " << loss / batch << std::endl;
+                            << ": success rate = " << static_cast<double>(succ) / count
+                            << ", precision = " << static_cast<double>(prec) / succ
+                            << ", loss = " << loss / succ
+                            << ", early update rate = " << static_cast<double>(eu) / succ << std::endl;
                     }
-                }
 
-                codes.clear();
-                texts.clear();
+                    codes.clear();
+                    texts.clear();
+                }
             }
         }
     }
@@ -403,21 +428,29 @@ bool Decoder::train(
     {
         assert(codes.size() == texts.size());
 
-        double prec;
-        double l;
-        if (update(codes, texts, prec, l))
+        if (update(codes, texts, succ, prec, loss, eu))
         {
             ++batch;
-            precision += prec;
-            loss += l;
-            INFO << batch
-                << ": precision = " << precision / batch
-                << ", loss = " << loss / batch << std::endl;
+            count += codes.size();
         }
     }
 
-    metrics.emplace("precision", precision / batch);
-    metrics.emplace("loss", loss / batch);
+    double success = static_cast<double>(succ) / count;
+    double precision = static_cast<double>(prec) / succ;
+    loss /= succ;
+    double early_update_rate = static_cast<double>(eu) / succ;
+
+    INFO << "count = " << count
+        << ", success rate = " << success
+        << ", precision = " << precision
+        << ", loss = " << loss
+        << ", early update rate = " << early_update_rate << std::endl;
+
+    metrics.emplace("count", count);
+    metrics.emplace("success rate", success);
+    metrics.emplace("precision", precision);
+    metrics.emplace("loss", loss);
+    metrics.emplace("early update rate", early_update_rate);
     return true;
 }
 
@@ -629,33 +662,33 @@ bool Decoder::update(
 bool Decoder::update(
     const std::vector<std::string> &codes,
     const std::vector<std::string> &texts,
-    double &precision,
-    double &loss
+    size_t &success,
+    size_t &precision,
+    double &loss,
+    size_t &early_update_count
 )
 {
     std::vector<int> indeces;
     std::vector<double> probs;
     update(codes, texts, indeces, probs);
 
-    precision = 0;
-    loss = 0;
-    size_t count = 0;
-    size_t prec = 0;
     for (size_t i = 0; i < codes.size(); ++i)
     {
         if (indeces[i] >= 0)
         {
-            ++count;
+            ++success;
             if (indeces[i] == 0)
             {
-                ++prec;
+                ++precision;
+            }
+            else if (indeces[i] >= beam_size)
+            {
+                ++early_update_count;
             }
             loss -= log(probs[i]);
         }
     }
 
-    precision = static_cast<double>(prec) / count;
-    loss /= count;
     return true;
 }
 
@@ -665,7 +698,9 @@ bool Decoder::evaluate(
 ) const
 {
     size_t count = 0;
+    size_t succ = 0;
     size_t prec = 0;
+    size_t inbeam = 0;
     double loss = 0;
 
     while (!is.eof())
@@ -682,6 +717,7 @@ bool Decoder::evaluate(
         {
             DEBUG << "evaluation sample code = " << code << ", text = " << text << std::endl;
 
+            ++count;
             std::vector<std::string> texts;
             std::vector<double> probs;
             if (predict(code, texts, probs))
@@ -690,7 +726,7 @@ bool Decoder::evaluate(
                 assert(!probs.empty());
                 assert(texts.size() == probs.size());
 
-                ++count;
+                ++succ;
                 if (texts.front() == text)
                 {
                     ++prec;
@@ -704,6 +740,7 @@ bool Decoder::evaluate(
 
                 if (i < texts.size())
                 {
+                    ++inbeam;
                     loss -= log(probs[i]);
                 }
                 else
@@ -732,8 +769,13 @@ bool Decoder::evaluate(
         }
     }
 
-    metrics.emplace("precision", static_cast<double>(prec) / count);
-    metrics.emplace("loss", loss / count);
+    metrics.emplace("count", count);
+    metrics.emplace("success rate", static_cast<double>(succ) / count);
+    metrics.emplace("precision", static_cast<double>(prec) / succ);
+    std::stringstream ss;
+    ss << "p@" << beam_size;
+    metrics.emplace(ss.str(), static_cast<double>(inbeam) / succ);
+    metrics.emplace("loss", loss / succ);
     return true;
 }
 
