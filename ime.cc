@@ -217,6 +217,7 @@ void Decoder::make_features(
     if (node.word != nullptr)
     {
         node.local_features.emplace("unigram:" + node.word->text, 1);
+
         if ((node.prev != nullptr) && (node.prev->prev_word != nullptr))
         {
             auto prev_word = node.prev->prev_word->word;
@@ -487,7 +488,7 @@ size_t Decoder::early_update(
 int Decoder::early_update(
     const std::string &code,
     const std::string &text,
-    std::vector<std::map<std::string, double>> &features,
+    std::vector<Features> &features,
     std::vector<double> &deltas,
     double &prob
 ) const
@@ -561,7 +562,7 @@ bool Decoder::update(
     double &prob
 )
 {
-    std::vector<std::map<std::string, double>> features;
+    std::vector<Features> features;
     std::vector<double> deltas;
     index = early_update(code, text, features, deltas, prob);
     if (index >= 0)
@@ -587,7 +588,7 @@ bool Decoder::update(
     assert(codes.size() == texts.size());
 
     auto batch_size = codes.size();
-    std::vector<std::vector<std::map<std::string, double>>> batch_features(batch_size);
+    std::vector<std::vector<Features>> batch_features(batch_size);
     std::vector<std::vector<double>> batch_deltas(batch_size);
     indeces.resize(batch_size);
     probs.resize(batch_size);

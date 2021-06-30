@@ -59,6 +59,180 @@ private:
     std::multimap<std::string, Word> data;
 };
 
+class Features
+{
+private:
+    struct Node
+    {
+        size_t ref;
+        Node *next;
+        std::string first;
+        int second;
+
+        Node(
+            const std::string &key,
+            int value,
+            Node *_next = nullptr
+        ) : ref(1), next(_next), first(key), second(value) {}
+
+        Node(
+            std::string &&key,
+            int value,
+            Node *_next = nullptr
+        ) : ref(1), next(_next), first(key), second(value) {}
+
+        Node(Node &other) :
+            ref(1), next(other.next), first(other.first), second(other.second)
+        {
+            incref(next);
+        }
+
+        ~Node()
+        {
+            decref(next);
+        }
+
+        static size_t incref(Node *node)
+        {
+            if (node != nullptr)
+            {
+                VERBOSE << "increase reference: key = " << node->first
+                    << ", value = " << node->second
+                    << ", ref = " << node->ref + 1 << std::endl;
+                return ++node->ref;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+        static size_t decref(Node *node)
+        {
+            if (node != nullptr)
+            {
+                assert(node->ref > 0);
+
+                auto ref = --node->ref;
+                VERBOSE << "decrease reference: key = " << node->first
+                    << ", value = " << node->second
+                    << ", ref = " << node->ref - 1
+                    << ((node->ref - 1 == 0) ? ", delete" : "") << std::endl;
+                if (ref == 0)
+                {
+                    delete node;
+                }
+                return ref;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+    };
+
+    class Iterator
+    {
+    public:
+        friend class Features;
+
+    private:
+        explicit Iterator(Node *node = nullptr) : p(node) {}
+
+    public:
+        Iterator(const Iterator &other) : p(other.p) {}
+
+        const Node & operator * () const
+        {
+            assert(p != nullptr);
+            assert(p->ref > 0);
+            return *p;
+        }
+
+        const Node * operator ->() const
+        {
+            assert(p != nullptr);
+            assert(p->ref > 0);
+            return p;
+        }
+
+        bool operator == (const Iterator &other) const
+        {
+            return p == other.p;
+        }
+
+        bool operator != (const Iterator &other) const
+        {
+            return p != other.p;
+        }
+
+        Iterator & operator ++ ()
+        {
+            if (p != nullptr)
+            {
+                assert(p->ref > 0);
+                p = p->next;
+            }
+            return *this;
+        }
+
+        Iterator operator ++ (int)
+        {
+            Iterator old(*this);
+            if (p != nullptr)
+            {
+                assert(p->ref > 0);
+                p = p->next;
+            }
+            return old;
+        }
+
+    private:
+        const Node *p;
+    };
+
+public:
+    Features() : head(nullptr) {}
+
+    Features(const Features &other) : head(other.head)
+    {
+        Node::incref(head);
+    }
+
+    Features(Features &&other) : head(other.head) {}
+
+    ~Features()
+    {
+        Node::decref(head);
+    }
+
+    Features & operator = (const Features &other)
+    {
+        head = other.head;
+        Node::incref(head);
+        return *this;
+    }
+
+    Node & emplace(const std::string &key, int value)
+    {
+        head = new Node(key, value, head);
+        return *head;
+    }
+
+    Iterator begin() const
+    {
+        return Iterator(head);
+    }
+
+    Iterator end() const
+    {
+        return Iterator();
+    }
+
+private:
+    Node *head;
+};
+
 class Model
 {
 public:
@@ -146,8 +320,8 @@ public:
         std::string code;
         const Word *word;
         const Node *prev_word;
-        std::map<std::string, double> features;
-        std::map<std::string, double> local_features;
+        Features features;
+        Features local_features;
         double score;
 
         Node() :
@@ -432,7 +606,7 @@ private:
     int early_update(
         const std::string &code,
         const std::string &text,
-        std::vector<std::map<std::string, double>> &features,
+        std::vector<Features> &features,
         std::vector<double> &deltas,
         double &prob
     ) const;
