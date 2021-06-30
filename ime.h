@@ -235,6 +235,27 @@ public:
         }
     }
 
+    std::ostream & output_score(std::ostream &os, const Node &node) const
+    {
+        for (auto p = &node; p != nullptr; p = p->prev)
+        {
+            for (auto &f : p->local_features)
+            {
+                os << f.first << ':' << f.second << " * ";
+                auto iter = weights.find(f.first);
+                os << ((iter != weights.cend()) ? iter->second : 0) << " + ";
+            }
+        }
+        for (auto &f : node.global_features)
+        {
+            os << f.first << ':' << f.second << " * ";
+            auto iter = weights.find(f.first);
+            os << ((iter != weights.cend()) ? iter->second : 0) << " + ";
+        }
+
+        return os;
+    }
+
 private:
     std::unordered_map<std::string, double> weights;
     double learning_rate;

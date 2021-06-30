@@ -289,17 +289,7 @@ std::ostream & Decoder::output_paths(
 
         os << code.substr(rear.code_pos, paths[i].size() - 1 - rear.code_pos) << ' ';
 
-        for (auto p = &rear; p != nullptr; p = p->prev)
-        {
-            for (auto &f : p->local_features)
-            {
-                os << f.first << ':' << f.second << ',';
-            }
-        }
-        for (auto &f : rear.global_features)
-        {
-            os << f.first << ':' << f.second << ',';
-        }
+        model.output_score(os, rear);
         os << std::endl;
     }
 
