@@ -9,7 +9,8 @@
 #include <iostream>
 #include <chrono>
 
-#include "ime/ime.h"
+#include "ime/dict.h"
+#include "ime/decoder.h"
 
 
 int main(int argc, char **argv)

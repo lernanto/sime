@@ -12,71 +12,13 @@
 #include <iostream>
 #include <sstream>
 
-#include "ime.h"
+#include "decoder.h"
 #include "log.h"
+#include "dict.h"
 
 
 namespace ime
 {
-
-bool Dictionary::load(std::istream &is)
-{
-    data.clear();
-
-    while (!is.eof())
-    {
-        std::string line;
-        std::string code;
-        std::string text;
-
-        std::getline(is, line);
-        std::stringstream ss(line);
-        ss >> code >> text;
-        if (!code.empty() && !text.empty())
-        {
-            DEBUG << "load word code = " << code << ", text = " << text << std::endl;
-            data.emplace(code, Word(code, text));
-        }
-    }
-
-    INFO << data.size() << " words loaded" << std::endl;
-    return true;
-}
-
-bool Model::save(std::ostream &os) const
-{
-    for (auto & i : weights)
-    {
-        os << i.first << '\t' << i.second << std::endl;;
-    }
-
-    INFO << weights.size() << " features saved" << std::endl;
-    return true;
-}
-
-bool Model::load(std::istream &is)
-{
-    weights.clear();
-
-    while (!is.eof())
-    {
-        std::string line;
-        std::string feature;
-        double weight;
-
-        std::getline(is, line);
-        std::stringstream ss(line);
-        ss >> feature >> weight;
-        if (!feature.empty())
-        {
-            DEBUG << "load feature " << feature << ", weight = " << weight << std::endl;
-        }
-        weights.emplace(feature, weight);
-    }
-
-    INFO << weights.size() << " features loaded" << std::endl;
-    return true;
-}
 
 bool Decoder::decode(
     const std::string &code,
