@@ -5,9 +5,12 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+#include <cmath>
 #include <string>
 #include <vector>
 #include <utility>
+#include <map>
+#include <iostream>
 
 
 namespace ime
@@ -71,6 +74,63 @@ struct Node
         return score > other.score;
     }
 };
+
+/**
+ * 用于记录训练和预测过程中的一些统计量.
+ */
+class Metrics
+{
+public:
+    double get(const std::string &key) const
+    {
+        auto iter = data.find(key);
+        if (iter != data.cend())
+        {
+            return iter->second;
+        }
+        else
+        {
+            return NAN;
+        }
+    }
+
+    void set(const std::string &key, double val)
+    {
+        data.emplace(key, val);
+    }
+
+    void clear()
+    {
+        data.clear();
+    }
+
+    std::map<std::string, double>::const_iterator begin() const
+    {
+        return data.begin();
+    }
+
+    std::map<std::string, double>::const_iterator end() const
+    {
+        return data.end();
+    }
+
+private:
+    std::map<std::string, double> data;
+};
+
+inline std::ostream & operator << (std::ostream &os, const Word &word)
+{
+    return os << word.text << '(' << word.code << ')';
+}
+
+inline std::ostream & operator << (std::ostream &os, const Metrics &metrics)
+{
+    for (auto &i : metrics)
+    {
+        os << i.first << " = " << i.second << ", ";
+    }
+    return os;
+}
 
 }   // namespace
 
