@@ -9,7 +9,7 @@
 #include <iostream>
 #include <chrono>
 
-#include "ime.h"
+#include "ime/ime.h"
 
 
 int main(int argc, char **argv)
