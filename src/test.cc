@@ -8,7 +8,7 @@
 #include <map>
 #include <iostream>
 
-#include "ime.h"
+#include "ime/ime.h"
 
 
 int main(int argc, char **argv)

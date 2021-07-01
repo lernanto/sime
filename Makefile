@@ -2,28 +2,44 @@ CC := g++ -c
 LD := g++
 INCLUDES += -I.
 LIBS +=
-# CFLAGS := $(INCLUDES) -g -O0
-CFLAGS := $(INCLUDES) -O3 -DNDEBUG=1 -fopenmp
-LDFLAGS := -fopenmp
+CFLAGS := $(INCLUDES)
+LDFLAGS :=
 
-.PHONY: all clean
+SRCDIR := src
+IMEDIR := $(SRCDIR)/ime
+SRCS := $(wildcard $(IMEDIR)/*.cc)
+OBJS := $(SRCS:%.cc=%.o)
+DEPS := $(SRCS:%.cc=%.d) $(SRCDIR)/train.d $(SRCDIR)/test.d
 
-all: train test
+.PHONY: all clean debug release
+
+all: release
+
+debug: CFLAGS += -g -O0
+debug: LDFALGS +=
+debug: train test
+
+release: CFLAGS += -O3 -DNDEBUG=1 -fopenmp
+release: LDFLAGS += -fopenmp
+release: train test
+
+prof: CFLAGS += -O3 -DNDEBUG=1 -pg
+prof: LDFLAGS += -pg
+prof: train test
 
 clean:
-	rm -rf train test ime.o train.o test.o
+	rm -rf train test $(OBJS) $(SRCDIR)/train.o $(SRCDIR)/test.o $(DEPS)
 
-train: train.o ime.o
+%.o : %.cc
+	$(CC) $(CFLAGS) -o $@ $<
+
+%.d : %.cc
+	$(CC) -M $(CFLAGS) -o $@ $<
+
+train: $(SRCDIR)/train.o $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-test: test.o ime.o
+test: $(SRCDIR)/test.o $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-ime.o: ime.cc
-	$(CC) $(CFLAGS) -o $@ $^
-
-train.o: train.cc
-	$(CC) $(CFLAGS) -o $@ $^
-
-test.o: test.cc
-	$(CC) $(CFLAGS) -o $@ $^
+include $(DEPS)
