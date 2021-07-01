@@ -8,7 +8,8 @@
 #include <map>
 #include <iostream>
 
-#include "ime/ime.h"
+#include "ime/dict.h"
+#include "ime/decoder.h"
 
 
 int main(int argc, char **argv)
