@@ -130,22 +130,14 @@ public:
         return predict(code, beam_size, texts, probs);
     }
 
-    bool train(std::istream &is, std::map<std::string, double> &metrics);
+    bool train(std::istream &is, Metrics &metrics);
 
     /**
      * 训练模型，批量更新版本.
      */
-    bool train(
-        std::istream &is,
-        size_t batch_size,
-        std::map<std::string, double> &metrics
-    );
+    bool train(std::istream &is, size_t batch_size, Metrics &metrics);
 
-    bool train(
-        const std::string &fname,
-        std::map<std::string, double> &metrics,
-        size_t batch_size = 1
-    )
+    bool train(const std::string &fname, Metrics &metrics, size_t batch_size = 1)
     {
         std::ifstream is(fname);
         if (batch_size == 1)
@@ -158,15 +150,9 @@ public:
         }
     }
 
-    bool evaluate(
-        std::istream &is,
-        std::map<std::string, double> &metrics
-    ) const;
+    bool evaluate(std::istream &is, Metrics &metrics) const;
 
-    bool evaluate(
-        const std::string &fname,
-        std::map<std::string, double> &metrics
-    ) const
+    bool evaluate(const std::string &fname, Metrics &metrics) const
     {
         std::ifstream is(fname);
         return evaluate(is, metrics);

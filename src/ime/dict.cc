@@ -30,8 +30,9 @@ bool Dictionary::load(std::istream &is)
         ss >> code >> text;
         if (!code.empty() && !text.empty())
         {
-            DEBUG << "load word code = " << code << ", text = " << text << std::endl;
-            data.emplace(code, Word(code, text));
+            Word word(code, text);
+            VERBOSE << "load word " << word << std::endl;
+            data.emplace(code, std::move(word));
         }
     }
 

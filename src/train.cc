@@ -9,6 +9,7 @@
 #include <iostream>
 #include <chrono>
 
+#include "ime/common.h"
 #include "ime/dict.h"
 #include "ime/decoder.h"
 
@@ -39,7 +40,7 @@ int main(int argc, char **argv)
     size_t batch_size = 100;
     for (size_t epoch = 0; epoch < epochs; ++epoch)
     {
-        std::map<std::string, double> metrics;
+        ime::Metrics metrics;
 
         start = stop;
         decoder.train(train_file, metrics, batch_size);
@@ -47,12 +48,7 @@ int main(int argc, char **argv)
 
         INFO << "epoch " << epoch + 1 << " train "
             << std::chrono::duration_cast<std::chrono::duration<float>>(stop - start).count()
-            << "s" << std::endl;
-
-        for (auto & i : metrics)
-        {
-            INFO << i.first << " = " << i.second << std::endl;
-        }
+            << "s " << metrics << std::endl;
 
         metrics.clear();
         start = stop;
@@ -61,12 +57,7 @@ int main(int argc, char **argv)
 
         INFO << "evaluate "
             << std::chrono::duration_cast<std::chrono::duration<float>>(stop - start).count()
-            << "s" << std::endl;
-
-        for (auto & i : metrics)
-        {
-            INFO << i.first << " = " << i.second << std::endl;
-        }
+            << "s " << metrics << std::endl;
     }
 
     start = stop;

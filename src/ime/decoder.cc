@@ -240,7 +240,7 @@ std::ostream & Decoder::output_paths(
     return os;
 }
 
-bool Decoder::train(std::istream &is, std::map<std::string, double> &metrics)
+bool Decoder::train(std::istream &is, Metrics &metrics)
 {
     size_t count = 0;
     size_t succ = 0;
@@ -301,20 +301,16 @@ bool Decoder::train(std::istream &is, std::map<std::string, double> &metrics)
         << ", loss = " << loss
         << ", early update rate = " << early_update_rate << std::endl;
 
-    metrics.emplace("count", count);
-    metrics.emplace("success rate", success);
-    metrics.emplace("precision", precision);
-    metrics.emplace("loss", loss);
-    metrics.emplace("early update rate", early_update_rate);
+    metrics.set("count", count);
+    metrics.set("success rate", success);
+    metrics.set("precision", precision);
+    metrics.set("loss", loss);
+    metrics.set("early update rate", early_update_rate);
 
     return true;
 }
 
-bool Decoder::train(
-    std::istream &is,
-    size_t batch_size,
-    std::map<std::string, double> &metrics
-)
+bool Decoder::train(std::istream &is, size_t batch_size, Metrics &metrics)
 {
     size_t batch = 0;
     size_t count = 0;
@@ -388,11 +384,11 @@ bool Decoder::train(
         << ", loss = " << loss
         << ", early update rate = " << early_update_rate << std::endl;
 
-    metrics.emplace("count", count);
-    metrics.emplace("success rate", success);
-    metrics.emplace("precision", precision);
-    metrics.emplace("loss", loss);
-    metrics.emplace("early update rate", early_update_rate);
+    metrics.set("count", count);
+    metrics.set("success rate", success);
+    metrics.set("precision", precision);
+    metrics.set("loss", loss);
+    metrics.set("early update rate", early_update_rate);
     return true;
 }
 
@@ -634,10 +630,7 @@ bool Decoder::update(
     return true;
 }
 
-bool Decoder::evaluate(
-    std::istream &is,
-    std::map<std::string, double> &metrics
-) const
+bool Decoder::evaluate(std::istream &is, Metrics &metrics) const
 {
     size_t count = 0;
     size_t succ = 0;
@@ -711,13 +704,13 @@ bool Decoder::evaluate(
         }
     }
 
-    metrics.emplace("count", count);
-    metrics.emplace("success rate", static_cast<double>(succ) / count);
-    metrics.emplace("precision", static_cast<double>(prec) / succ);
+    metrics.set("count", count);
+    metrics.set("success rate", static_cast<double>(succ) / count);
+    metrics.set("precision", static_cast<double>(prec) / succ);
     std::stringstream ss;
     ss << "p@" << beam_size;
-    metrics.emplace(ss.str(), static_cast<double>(inbeam) / succ);
-    metrics.emplace("loss", loss / succ);
+    metrics.set(ss.str(), static_cast<double>(inbeam) / succ);
+    metrics.set("loss", loss / succ);
     return true;
 }
 
