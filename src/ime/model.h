@@ -90,6 +90,33 @@ public:
         return sum;
     }
 
+    void compute_score(Node &node) const
+    {
+        // 因为是线性模型且特征是子路径局部特征的超集，从前一个节点取局部特征分数以加速计算
+        node.local_score = (node.prev != nullptr) ? node.prev->local_score : 0;
+
+        // 累加本节点局部特征的得分
+        for (auto &f : node.local_features)
+        {
+            auto iter = weights.find(f.first);
+            if (iter != weights.cend())
+            {
+                node.local_score += f.second * iter->second;
+            }
+        }
+
+        // 再加上本节点（代表的路径）特有的全局特征
+        node.score = node.local_score;
+        for (auto &f : node.global_features)
+        {
+            auto iter = weights.find(f.first);
+            if (iter != weights.cend())
+            {
+                node.score += f.second * iter->second;
+            }
+        }
+    }
+
     template<typename Iterator>
     void update(Iterator begin, Iterator end, double delta)
     {

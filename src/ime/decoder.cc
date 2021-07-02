@@ -105,7 +105,7 @@ bool Decoder::advance(
         node.text_pos = prev_node.text_pos;
         node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
         make_features(node, code, pos);
-        node.score = model.score(node);
+        model.compute_score(node);
 
         // 根据编码子串从词典查找匹配的词进行归约
         auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);
@@ -133,7 +133,7 @@ bool Decoder::advance(
                 node.word = &word;
                 node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
                 make_features(node, code, pos);
-                node.score = model.score(node);
+                model.compute_score(node);
             }
         }
     }

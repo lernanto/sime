@@ -45,6 +45,9 @@ struct Node
     std::vector<std::pair<std::string, double>> local_features;
     /// 全局特征，描述整条路径的特征，只有当节点是路径的最后一个节点才生效
     std::vector<std::pair<std::string, double>> global_features;
+    /// 为加速计算，保存该节点及之前子路径局部特征的得分
+    double local_score;
+    /// 以该节点为代表的路径（即以该节点结尾的路径）的得分
     double score;
 
     Node() :
@@ -56,6 +59,7 @@ struct Node
         prev_word(nullptr),
         local_features(),
         global_features(),
+        local_score(0),
         score(0) {}
 
     Node(const Node &other) :
@@ -67,6 +71,7 @@ struct Node
         prev_word(nullptr),
         local_features(other.local_features),
         global_features(other.global_features),
+        local_score(other.local_score),
         score(other.score) {}
 
     bool operator > (const Node &other) const
