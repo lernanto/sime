@@ -630,6 +630,68 @@ bool Decoder::update(
     return true;
 }
 
+int Decoder::predict(
+    const std::string &code,
+    const std::string &text,
+    double &prob
+) const
+{
+    int index = -1;
+    std::vector<std::string> texts;
+    std::vector<double> probs;
+    if (predict(code, texts, probs))
+    {
+        assert(!texts.empty());
+        assert(!probs.empty());
+        assert(texts.size() == probs.size());
+
+        for (index = 0; (texts[index] != text) && (index < texts.size()); ++index);
+        if (index < texts.size())
+        {
+            prob = probs[index];
+        }
+        else
+        {
+            DEBUG << "target text not in beam code = " << code << ", text = " << text << std::endl;
+
+            // 预测结果中没有包含目标文本，无法计算概率，限定文本解码以获取目标文本分数
+            std::vector<std::vector<Node>> beams;
+            decode(code, beams);
+            assert(!beams.empty());
+            assert(!beams.back().empty());
+
+            double sum = 0;
+            for (auto &node : beams.back())
+            {
+                sum += exp(node.score);
+            }
+
+            beams.clear();
+            if (decode(code, text, beams))
+            {
+                assert(!beams.empty());
+                assert(!beams.back().empty());
+                index = beam_size;
+                sum += exp(beams.back().front().score);
+                prob = exp(beams.back().front().score) / sum;
+            }
+        }
+    }
+
+    if (index >= 0)
+    {
+        DEBUG << "predict code = " << code
+            << ", text = " << text
+            << ", prob = " << prob << std::endl;
+    }
+    else
+    {
+        DEBUG << "cannot predict code = " << code
+            << ", text = " << text << std::endl;
+    }
+    return index;
+}
+
 bool Decoder::evaluate(std::istream &is, Metrics &metrics) const
 {
     size_t count = 0;
@@ -653,51 +715,86 @@ bool Decoder::evaluate(std::istream &is, Metrics &metrics) const
             DEBUG << "evaluation sample code = " << code << ", text = " << text << std::endl;
 
             ++count;
-            std::vector<std::string> texts;
-            std::vector<double> probs;
-            if (predict(code, texts, probs))
+            double prob = 0;
+            auto index = predict(code, text, prob);
+            if (index >= 0)
             {
-                assert(!texts.empty());
-                assert(!probs.empty());
-                assert(texts.size() == probs.size());
-
                 ++succ;
-                if (texts.front() == text)
-                {
-                    ++prec;
-                }
-
-                size_t i = 0;
-                while ((texts[i] != text) && (i < texts.size()))
-                {
-                    ++i;
-                }
-
-                if (i < texts.size())
+                if (index < beam_size)
                 {
                     ++inbeam;
-                    loss -= log(probs[i]);
-                }
-                else
-                {
-                    std::vector<std::vector<Node>> beams;
-                    decode(code, beams);
-                    assert(!beams.empty());
-                    assert(!beams.back().empty());
-
-                    double sum = 0;
-                    for (auto &node : beams.back())
+                    if (index == 0)
                     {
-                        sum += exp(node.score);
+                        ++prec;
                     }
+                }
 
-                    beams.clear();
-                    if (decode(code, text, beams))
+                loss -= log(prob);
+            }
+        }
+    }
+
+    metrics.set("count", count);
+    metrics.set("success rate", static_cast<double>(succ) / count);
+    metrics.set("precision", static_cast<double>(prec) / succ);
+    std::stringstream ss;
+    ss << "p@" << beam_size;
+    metrics.set(ss.str(), static_cast<double>(inbeam) / succ);
+    metrics.set("loss", loss / succ);
+    return true;
+}
+
+bool Decoder::evaluate(std::istream &is, size_t batch_size, Metrics &metrics) const
+{
+    size_t count = 0;
+    size_t succ = 0;
+    size_t prec = 0;
+    size_t inbeam = 0;
+    double loss = 0;
+
+    while (!is.eof())
+    {
+        std::vector<std::string> codes;
+        std::vector<std::string> texts;
+        for (size_t i = 0; (i < batch_size) && !is.eof(); ++i)
+        {
+            std::string line;
+            std::string code;
+            std::string text;
+
+            std::getline(is, line);
+            std::stringstream ss(line);
+            ss >> code >> text;
+
+            if (!code.empty() && !text.empty())
+            {
+                DEBUG << "evaluation sample code = " << code << ", text = " << text << std::endl;
+                codes.push_back(std::move(code));
+                texts.push_back(std::move(text));
+            }
+        }
+
+        if (!codes.empty())
+        {
+            assert(codes.size() == texts.size());
+            count += codes.size();
+
+#pragma omp parallel for num_threads(8)
+            for (size_t i = 0; i < codes.size(); ++i)
+            {
+                double prob = 0;
+                auto index = predict(codes[i], texts[i], prob);
+                if (index >= 0)
+                {
+                    ++succ;
+                    loss -= log(prob);
+                    if (index < beam_size)
                     {
-                        assert(!beams.empty());
-                        assert(!beams.back().empty());
-                        sum += exp(beams.back().front().score);
-                        loss += log(sum) - beams.back().front().score;
+                        ++inbeam;
+                        if (index == 0)
+                        {
+                            ++prec;
+                        }
                     }
                 }
             }

@@ -130,6 +130,12 @@ public:
         return predict(code, beam_size, texts, probs);
     }
 
+    int predict(
+        const std::string &code,
+        const std::string &text,
+        double &prob
+    ) const;
+
     bool train(std::istream &is, Metrics &metrics);
 
     /**
@@ -152,10 +158,23 @@ public:
 
     bool evaluate(std::istream &is, Metrics &metrics) const;
 
-    bool evaluate(const std::string &fname, Metrics &metrics) const
+    bool evaluate(std::istream &is, size_t batch_size, Metrics &metrics) const;
+
+    bool evaluate(
+        const std::string &fname,
+        Metrics &metrics,
+        size_t batch_size = 1
+    ) const
     {
         std::ifstream is(fname);
-        return evaluate(is, metrics);
+        if (batch_size == 1)
+        {
+            return evaluate(is, metrics);
+        }
+        else
+        {
+            return evaluate(is, batch_size, metrics);
+        }
     }
 
     bool save(const std::string &fname) const

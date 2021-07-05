@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 
         metrics.clear();
         start = stop;
-        decoder.evaluate(eval_file, metrics);
+        decoder.evaluate(eval_file, metrics, batch_size);
         stop = std::chrono::high_resolution_clock::now();
 
         INFO << "evaluate "
