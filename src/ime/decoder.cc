@@ -6,6 +6,7 @@
 #include <cmath>
 #include <string>
 #include <vector>
+#include <memory>
 #include <utility>
 #include <algorithm>
 #include <functional>
@@ -14,99 +15,92 @@
 
 #include "decoder.h"
 #include "log.h"
+#include "common.h"
+#include "feature.h"
 #include "dict.h"
 
+
+namespace
+{
+
+inline bool greater(const ime::Node *a, const ime::Node *b)
+{
+    return *a > *b;
+}
+
+}   // namespace
 
 namespace ime
 {
 
-bool Decoder::decode(
-    const std::string &code,
-    const std::string &text,
-    std::vector<std::vector<Node>> &beams,
-    size_t beam_size
-) const
+std::allocator<Node> Lattice::allocator;
+
+void Lattice::topk()
 {
-    DEBUG << "decode code = " << code << ", text = " << text << std::endl;
+    VERBOSE << "add node " << *heap.back() << std::endl;
 
-    init_beams(beams, code.length());
-    auto succ = begin_decode(code, text, beam_size, beams);
-
-    for (size_t pos = 1; succ && (pos <= code.length()); ++pos)
+    if (heap.size() == beam_size)
     {
-        succ = advance(code, text, pos, beam_size, beams);
+        std::make_heap(heap.begin(), heap.end(), greater);
     }
-
-    if (succ)
+    else if (heap.size() > beam_size)
     {
-        succ = end_decode(code, text, beam_size, beams);
-    }
-
-    if (succ)
-    {
-        if (LOG_LEVEL <= LOG_DEBUG)
-        {
-            auto paths = get_paths(beams);
-            output_paths(std::cerr, code, paths);
-        }
-        return true;
-    }
-    else
-    {
-        INFO << "cannot decode code = " << code << ", text = " << text << std::endl;
-        return false;
+        std::push_heap(heap.begin(), heap.end(), greater);
+        std::pop_heap(heap.begin(), heap.end(), greater);
+        VERBOSE << "drop node " << *heap.back() << std::endl;
     }
 }
 
 bool Decoder::decode(
     const std::string &code,
-    size_t max_path,
-    std::vector<std::vector<Node>> &paths,
-    std::vector<double> &probs
+    const std::string &text,
+    Lattice &lattice,
+    size_t beam_size
 ) const
 {
-    std::vector<std::vector<Node>> beams;
-    if (decode(code, beams))
+    DEBUG << "decode code = " << code << ", text = " << text << std::endl;
+
+    lattice.init(code.length(), beam_size);
+    auto succ = begin_decode(code, text, beam_size, lattice);
+
+    for (size_t pos = 1; succ && (pos <= code.length()); ++pos)
     {
-        assert(!beams.empty());
-        assert(!beams.back().empty());
-
-        double sum = 0;
-        for (auto &node : beams.back())
-        {
-            sum += exp(node.score);
-        }
-
-        paths = get_paths(beams, max_path);
-        probs.clear();
-        probs.reserve(paths.size());
-        for (auto & path : paths)
-        {
-            assert(!path.empty());
-            probs.push_back(exp(path.back().score) / sum);
-        }
-
-        return true;
+        succ = advance(code, text, pos, beam_size, lattice);
     }
 
-    return false;
+    if (succ)
+    {
+        succ = end_decode(code, text, beam_size, lattice);
+    }
+
+    if (succ)
+    {
+        DEBUG << lattice << std::endl;
+    }
+    else
+    {
+        INFO << "cannot decode code = " << code << ", text = " << text << std::endl;
+    }
+    return succ;
 }
 
 bool Decoder::begin_decode(
     const std::string &code,
     const std::string &text,
     size_t beam_size,
-    std::vector<std::vector<Node>> &beams,
+    Lattice &lattice,
     bool bos
 ) const
 {
-    beams.emplace_back();
-    beams.back().emplace_back();
+    lattice.begin_step();
+    auto &node = lattice.emplace();
     if (bos)
     {
         // 添加一个虚拟的句子起始标识，用于构造 n-gram
-        beams.back().back().word = &bos_eos;
+        node.word = &bos_eos;
     }
+    lattice.topk();
+    lattice.end_step();
 
     return true;
 }
@@ -115,23 +109,20 @@ bool Decoder::end_decode(
     const std::string &code,
     const std::string &text,
     size_t beam_size,
-    std::vector<std::vector<Node>> &beams,
+    Lattice &lattice,
     bool eos
 ) const
 {
     // 最后加入一列特殊的节点，以标记归约完全部编码（和文本）的路径
-    auto &prev_beam = beams.back();
-    beams.emplace_back();
-    auto &beam = beams.back();
+    auto prev_beam = lattice.back();
+    lattice.begin_step();
 
     for (auto &prev_node : prev_beam)
     {
         if ((prev_node.code_pos == code.length())
             && (text.empty() || (prev_node.text_pos == text.length())))
         {
-            beam.emplace_back(&prev_node);
-            auto &node = beam.back();
-
+            auto &node = lattice.emplace(&prev_node);
             if (eos)
             {
                 // 添加一个虚拟的句子结束标识，用于构造 n-gram
@@ -140,26 +131,14 @@ bool Decoder::end_decode(
 
             make_features(node, code, code.length());
             model.compute_score(node);
+            lattice.topk();
         }
     }
 
-    if (!beam.empty())
-    {
-        topk(beam, beam_size);
-
-        VERBOSE << "end decode" << std::endl;
-        if (LOG_LEVEL <= LOG_VERBOSE)
-        {
-            auto paths = get_paths(beams);
-            output_paths(std::cerr, code, paths);
-        }
-
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    lattice.end_step();
+    VERBOSE << "end decode" << std::endl;
+    VERBOSE << lattice << std::endl;
+    return lattice.back().size() > 0;
 }
 
 bool Decoder::advance(
@@ -167,29 +146,28 @@ bool Decoder::advance(
     const std::string &text,
     size_t pos,
     size_t beam_size,
-    std::vector<std::vector<Node>> &beams
+    Lattice &lattice
 ) const
 {
-    auto &prev_beam = beams.back();
-    beams.emplace_back();
-    auto &beam = beams.back();
+    auto prev_beam = lattice.back();
+    assert(prev_beam.size() > 0);
+    lattice.begin_step();
 
     for (auto &prev_node : prev_beam)
     {
-        beam.emplace_back(&prev_node);
-        auto &node = beam.back();
-        if (fullfill_shift_constraint(node, code, pos))
+        auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);
+
+        if (fullfill_shift_constraint(prev_node, code, pos))
         {
+            VERBOSE << "shift code = " << subcode << std::endl;
+
+            auto &node = lattice.emplace(&prev_node);
             make_features(node, code, pos);
             model.compute_score(node);
-        }
-        else
-        {
-            beam.pop_back();
+            lattice.topk();
         }
 
         // 根据编码子串从词典查找匹配的词进行归约
-        auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);
         VERBOSE << "code = " << subcode << std::endl;
         std::multimap<std::string, Word>::const_iterator begin;
         std::multimap<std::string, Word>::const_iterator end;
@@ -199,38 +177,27 @@ bool Decoder::advance(
             auto &word = j->second;
             assert(!word.text.empty());
 
-            beam.emplace_back(&prev_node, pos, prev_node.text_pos + word.text.length(), &word);
-            auto &node = beam.back();
-            if (fullfill_reduce_constraint(node, code, text, pos))
+            if (fullfill_reduce_constraint(prev_node, code, text, pos, word))
             {
-                VERBOSE << "code = " << j->first << ", word = " << word.text << std::endl;
+                VERBOSE << "word = " << word << std::endl;
+
+                auto &node = lattice.emplace(
+                    &prev_node,
+                    pos,
+                    prev_node.text_pos + word.text.length(),
+                    &word
+                );
                 make_features(node, code, pos);
                 model.compute_score(node);
-            }
-            else
-            {
-                beam.pop_back();
+                lattice.topk();
             }
         }
     }
 
-    if (!beam.empty())
-    {
-        topk(beam, beam_size);
-
-        VERBOSE << "pos = " << pos << std::endl;
-        if (LOG_LEVEL <= LOG_VERBOSE)
-        {
-            auto paths = get_paths(beams);
-            output_paths(std::cerr, code, paths);
-        }
-
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    lattice.end_step();
+    VERBOSE << "pos = " << pos << std::endl;
+    VERBOSE << lattice << std::endl;
+    return lattice.back().size() > 0;
 }
 
 void Decoder::make_features(
@@ -266,81 +233,32 @@ void Decoder::make_features(
     }
 }
 
-void Decoder::topk(std::vector<Node> &beam, size_t beam_size) const
-{
-    std::vector<const Node *> tosort;
-    tosort.reserve(beam.size());
-    for (auto &node : beam)
-    {
-        tosort.push_back(&node);
-    }
-
-    std::sort(
-        tosort.begin(),
-        tosort.end(),
-        [](const Node *a, const Node *b) { return *a > *b; }
-    );
-    if (tosort.size() > beam_size)
-    {
-        tosort.resize(beam_size);
-    }
-
-    std::vector<Node> new_beam;
-    new_beam.reserve(tosort.size());
-    for (auto &node : tosort)
-    {
-        new_beam.emplace_back(*node);
-    }
-    beam.swap(new_beam);
-}
-
-std::vector<std::vector<Node>> Decoder::get_paths(
-    const std::vector<std::vector<Node>> &beams,
-    const std::vector<size_t> &indeces
-) const {
-    assert(!beams.empty());
-
-    std::vector<std::vector<Node>> paths;
-    paths.reserve(indeces.size());
-
-    for (auto i : indeces)
-    {
-        paths.emplace_back();
-        auto & path = paths.back();
-
-        for (auto p = &beams.back()[i]; p != nullptr; p = p->prev)
-        {
-            path.push_back(*p);
-        }
-
-        std::reverse(path.begin(), path.end());
-    }
-
-    return paths;
-}
-
 std::ostream & Decoder::output_paths(
     std::ostream &os,
     const std::string &code,
-    const std::vector<std::vector<Node>> &paths
+    size_t pos,
+    const std::vector<Lattice::ReversePath> &paths
 ) const {
     for (size_t i = 0; i < paths.size(); ++i)
     {
-        assert(!paths[i].empty());
+        os << '#' << i << ": " << paths[i].score() << ' ';
 
-        auto &rear = paths[i].back();
-
-        os << '#' << i << ": " << rear.score << ' ';
-
-        for (auto &node : paths[i])
+        std::vector<const Node *> path;
+        path.reserve(beam_size);
+        for (auto j = paths[i].crbegin(); j != paths[i].crend(); ++j)
         {
-            if (node.word)
+            path.push_back(&*j);
+        }
+        for (auto j = path.crbegin(); j != path.crend(); ++j)
+        {
+            if ((*j)->word != nullptr)
             {
-                os << node.word->text << ' ';
+                os << *(*j)->word << ' ';
             }
         }
 
-        os << code.substr(rear.code_pos, paths[i].size() - 1 - rear.code_pos) << ' ';
+        auto &rear = paths[i].back();
+        os << code.substr(rear.code_pos, pos - rear.code_pos) << ' ';
 
         model.output_score(os, rear);
         os << std::endl;
@@ -504,8 +422,8 @@ bool Decoder::train(std::istream &is, size_t batch_size, Metrics &metrics)
 
 size_t Decoder::early_update(
     const std::string &code,
-    const std::vector<std::vector<Node>> &paths,
-    std::vector<std::vector<Node>> &beams,
+    const std::vector<std::vector<const Node *>> &paths,
+    Lattice &lattice,
     size_t &label
 ) const
 {
@@ -513,22 +431,22 @@ size_t Decoder::early_update(
     assert(paths.front().size() == code.length() + 2);
 
     auto succ = true;
-    init_beams(beams, code.length());
-    begin_decode(code, "", beam_size, beams);
+    lattice.init(code.length(), beam_size);
+    begin_decode(code, "", beam_size, lattice);
 
     // 为目标路径初始化祖先节点的索引，用于对比路径
     std::vector<size_t> indeces(paths.size(), 0);
     size_t pos;
     for (pos = 1; succ && (pos <= code.length()); ++pos)
     {
-        advance(code, "", pos, beam_size, beams);
-        succ = match(beams, paths, pos, indeces);
+        advance(code, "", pos, beam_size, lattice);
+        succ = match(lattice, paths, pos, indeces);
     }
 
     if (succ)
     {
-        end_decode(code, "", beam_size, beams);
-        succ = match(beams, paths, pos, indeces);
+        end_decode(code, "", beam_size, lattice);
+        succ = match(lattice, paths, pos, indeces);
     }
 
     if (succ)
@@ -543,7 +461,7 @@ size_t Decoder::early_update(
     // 搜索结果包含至少一条目标路径，返回排在最前的目标路径
     // 由于 match 已经正确设置了 indeces，即使在查找路径失败时仍然有效
     size_t i = 0;
-    while ((i < indeces.size()) && (indeces[i] >= beams.back().size()))
+    while ((i < indeces.size()) && (indeces[i] >= lattice.back().size()))
     {
         ++i;
     }
@@ -551,48 +469,52 @@ size_t Decoder::early_update(
     label = indeces[i];
 
     DEBUG << "label = " << label << std::endl;
-    if (LOG_LEVEL <= LOG_DEBUG)
-    {
-        auto paths = get_paths(beams);
-        output_paths(std::cerr, code, paths);
-    }
-
+    DEBUG << lattice << std::endl;
     return pos;
 }
 
 size_t Decoder::early_update(
     const std::string &code,
     const std::string &text,
-    std::vector<std::vector<Node>> &beams,
+    Lattice &lattice,
     std::vector<double> &deltas,
     size_t &label,
     double &prob
 ) const
 {
-    std::vector<std::vector<Node>> dest_beams;
-    if (!decode(code, text, dest_beams))
+    Lattice dest;
+    if (!decode(code, text, dest))
     {
         // 没有搜索到匹配的路径，增加集束大小再试一次
-        if (!decode(code, text, dest_beams, beam_size * 2))
+        if (!decode(code, text, dest, beam_size * 2))
         {
             DEBUG << "cannot decode code = " << code << ", text = " << text << std::endl;
             return 0;
         }
     }
 
-    auto paths = get_paths(dest_beams);
-    auto pos = early_update(code, paths, beams, label);
+    std::vector<Lattice::ReversePath> rpaths;
+    dest.get_paths(std::back_inserter(rpaths));
+    std::vector<std::vector<const Node *>> paths;
+    paths.reserve(rpaths.size());
+    for (auto &p : rpaths)
+    {
+        paths.push_back(p.reverse());
+    }
+
+    auto pos = early_update(code, paths, lattice, label);
+    DEBUG << lattice << std::endl;
 
     // 计算各路径梯度
     double sum = 0;
-    for (auto &node : beams.back())
+    for (auto &node : lattice.back())
     {
         sum += exp(node.score);
     }
 
-    for (size_t i = 0; i < beams.back().size(); ++i)
+    for (size_t i = 0; i < lattice.back().size(); ++i)
     {
-        auto &node = beams.back()[i];
+        auto &node = lattice.back()[i];
         auto p = exp(node.score) / sum;
         auto delta = -p;
         if (i == label)
@@ -607,14 +529,14 @@ size_t Decoder::early_update(
 }
 
 bool Decoder::match(
-    std::vector<std::vector<Node>> &beams,
-    const std::vector<std::vector<Node>> &paths,
+    Lattice &lattice,
+    const std::vector<std::vector<const Node *>> &paths,
     size_t pos,
     std::vector<size_t> &indeces
 ) const
 {
     assert(!paths.empty());
-    assert(pos < beams.size());
+    assert(pos < lattice.size());
     assert(pos < paths.front().size());
     assert(indeces.size() == paths.size());
 
@@ -627,12 +549,12 @@ bool Decoder::match(
 
     for (size_t i = 0; i < paths.size(); ++i)
     {
-        if (prev_indeces[i] < beams[pos - 1].size())
+        if (prev_indeces[i] < lattice[pos - 1].size())
         {
-            for (size_t j = 0; j < beams[pos].size(); ++j)
+            for (size_t j = 0; j < lattice[pos].size(); ++j)
             {
-                if ((beams[pos][j].prev == &beams[pos - 1][prev_indeces[i]])
-                    && (beams[pos][j].word == paths[i][pos].word))
+                if ((lattice[pos][j].prev == &lattice[pos - 1][prev_indeces[i]])
+                    && (lattice[pos][j].word == paths[i][pos]->word))
                 {
                     indeces[i] = j;
                     found = true;
@@ -647,18 +569,18 @@ bool Decoder::match(
         // 目标路径全部掉出集束，查找祖先节点还在集束内的第一条路径
         size_t i = 0;
         while ((i < prev_indeces.size())
-            && (prev_indeces[i] >= beams[pos - 1].size()))
+            && (prev_indeces[i] >= lattice[pos - 1].size()))
         {
             ++i;
         }
         assert(i < prev_indeces.size());
 
-        beams[pos].emplace_back(paths[i][pos]);
-        auto &node = beams[pos].back();
-        node.prev = &beams[pos - 1][prev_indeces[i]];
+        // 把找到的一条目标路径强制加入网格，以便后续计算梯度
+        auto &node = lattice.emplace(*paths[i][pos]);
+        node.prev = &lattice[pos - 1][prev_indeces[i]];
         node.prev_word = (node.prev->word != nullptr) ? node.prev : node.prev_word;
 
-        indeces[i] = beams[pos].size() - 1;
+        indeces[i] = lattice[pos].size() - 1;
     }
 
     return found;
@@ -671,20 +593,17 @@ size_t Decoder::update(
     double &prob
 )
 {
-    std::vector<std::vector<Node>> beams;
+    Lattice lattice;
     std::vector<double> deltas;
-    auto pos = early_update(code, text, beams, deltas, index, prob);
+    auto pos = early_update(code, text, lattice, deltas, index, prob);
     if (pos > 0)
     {
-        assert(beams.back().size() == deltas.size());
+        auto rear = lattice.back();
+        assert(rear.size() == deltas.size());
 
         std::vector<Features> features;
-        features.reserve(beams.back().size());
-        features.insert(
-            features.end(),
-            beams.back().cbegin(),
-            beams.back().cend()
-        );
+        features.reserve(rear.size());
+        features.insert(features.end(), rear.begin(), rear.end());
 
         model.update(
             features.begin(),
@@ -712,7 +631,7 @@ void Decoder::update(
     assert(codes.size() == texts.size());
 
     auto batch_size = codes.size();
-    std::vector<std::vector<std::vector<Node>>> batch_beams(batch_size);
+    std::vector<Lattice> batch_lattice(batch_size);
     std::vector<std::vector<double>> batch_deltas(batch_size);
     positions.resize(batch_size);
     indeces.resize(batch_size);
@@ -725,7 +644,7 @@ void Decoder::update(
         positions[i] = early_update(
             codes[i],
             texts[i],
-            batch_beams[i],
+            batch_lattice[i],
             batch_deltas[i],
             indeces[i],
             probs[i]
@@ -737,12 +656,12 @@ void Decoder::update(
     {
         if (positions[i] > 0)
         {
-            auto &rear = batch_beams[i].back();
+            auto rear = batch_lattice[i].back();
             assert(rear.size() == batch_deltas[i].size());
 
             std::vector<Features> features;
             features.reserve(rear.size());
-            features.insert(features.end(), rear.cbegin(), rear.cend());
+            features.insert(features.end(), rear.begin(), rear.end());
 
             model.update(
                 features.begin(),
@@ -796,20 +715,26 @@ int Decoder::predict(
 {
     int index = -1;
 
-    std::vector<std::vector<Node>> beams;
-    if (decode(code, beams))
+    Lattice lattice;
+    if (decode(code, lattice))
     {
         double sum = 0;
-        for (auto &node : beams.back())
+        for (auto &node : lattice.back())
         {
             sum += exp(node.score);
         }
 
-        auto texts = get_texts(get_paths(beams));
-        for (index = 0; (index < texts.size()) && (texts[index] != text); ++index);
-        if (index < texts.size())
+        std::vector<Lattice::ReversePath> paths;
+        lattice.get_paths(std::back_inserter(paths));
+        index = 0;
+        while ((index < paths.size()) && (paths[index].text() != text))
         {
-            prob = exp(beams.back()[index].score) / sum;
+            ++index;
+        }
+
+        if (index < paths.size())
+        {
+            prob = exp(lattice.back()[index].score) / sum;
         }
         else
         {
@@ -817,14 +742,14 @@ int Decoder::predict(
             DEBUG << "target text not in beam code = " << code
                 << ", text = " << text << std::endl;
 
-            beams.clear();
-            if (decode(code, text, beams))
+            Lattice lattice;
+            if (decode(code, text, lattice))
             {
-                assert(!beams.empty());
-                assert(!beams.back().empty());
                 index = beam_size;
-                sum += exp(beams.back().front().score);
-                prob = exp(beams.back().front().score) / sum;
+                std::vector<Lattice::ReversePath> paths;
+                lattice.get_paths(1, std::back_inserter(paths));
+                sum += exp(paths.front().score());
+                prob = exp(paths.front().score()) / sum;
             }
         }
     }
