@@ -140,7 +140,7 @@ private:
 class Lattice
 {
 public:
-    class ReversePathIterator
+    class ReversePathIterator : public std::iterator<std::forward_iterator_tag, Node>
     {
     public:
         explicit ReversePathIterator(const Node *node = nullptr) : p(node) {}
@@ -225,6 +225,8 @@ public:
     class ReversePath
     {
     public:
+        friend std::ostream & operator << (std::ostream &os, const ReversePath &rpath);
+
         typedef ReversePathIterator const_reverse_iterator;
 
         explicit ReversePath(const Node *rear_ = nullptr) : rear(rear_) {}
@@ -276,6 +278,11 @@ public:
         const_reverse_iterator crend() const
         {
             return ReversePathIterator(nullptr);
+        }
+
+        bool operator < (const ReversePath &other) const
+        {
+            return rear->score < other.rear->score;
         }
 
     private:
@@ -428,6 +435,11 @@ public:
         return Beam(limits[i], limits[i + 1]);
     }
 
+    size_t size() const
+    {
+        return limits.size() - 1;
+    }
+
     Beam back() const
     {
         assert(limits.size() >= 2);
@@ -448,22 +460,22 @@ public:
         }
         else
         {
-            std::vector<const Node *> result;
-            result.reserve(beam_size);
+            std::vector<ReversePath> paths;
+            paths.reserve(beam_size);
             for (auto p = *(limits.cend() - 2); p < limits.back(); ++p)
             {
-                result.push_back(p);
+                paths.emplace_back(p);
             }
 
-            std::sort(result.begin(), result.end(), less);
-            if (num < result.size())
+            std::sort(paths.begin(), paths.end());
+            if (num < paths.size())
             {
-                result.resize(num);
+                paths.resize(num);
             }
 
-            for (auto &p : result)
+            for (auto &p : paths)
             {
-                *out++ = ReversePath(p);
+                *out++ = p;
             }
         }
     }
@@ -722,6 +734,55 @@ private:
     const Dictionary &dict;
     Model model;
 };
+
+inline std::ostream & operator << (std::ostream &os, const Features &features)
+{
+    for (auto &f : features)
+    {
+        os << f.first << ':' << f.second <<',';
+    }
+    return os;
+}
+
+inline std::ostream & operator << (std::ostream &os, const Lattice::ReversePath &rpath)
+{
+    std::vector<const Node *> path;
+    for (auto i = rpath.crbegin(); i != rpath.crend(); ++i)
+    {
+        if (i->word != nullptr)
+        {
+            path.push_back(&*i);
+        }
+    }
+    std::reverse(path.begin(), path.end());
+
+    for (auto &node : path)
+    {
+        os << *node << ' ';
+    }
+
+    if ((rpath.rear != nullptr) && !rpath.rear->global_features.empty())
+    {
+        os << '(';
+        for (auto &f : rpath.rear->global_features)
+        {
+            os << f.first << ':' << f.second << ',';
+        }
+        os << ' ' << rpath.rear->score - rpath.rear->local_score << ')';
+    }
+
+    return os;
+}
+
+inline std::ostream & operator << (std::ostream &os, const Lattice &lattice)
+{
+    for (size_t i = 0; i < lattice.back().size(); ++i)
+    {
+        Lattice::ReversePath path(&lattice.back()[i]);
+        os << '#' << i << ' ' << path.score() << ' ' << path << std::endl;
+    }
+    return os;
+}
 
 }   // namespace ime
 

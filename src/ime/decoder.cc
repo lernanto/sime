@@ -55,14 +55,7 @@ bool Decoder::decode(
         }
     }
 
-    if (LOG_LEVEL <= LOG_DEBUG)
-    {
-        std::vector<Lattice::ReversePath> paths;
-        paths.reserve(beam_size);
-        lattice.get_paths(std::back_inserter(paths));
-        output_paths(std::cerr, code, code.length(), paths);
-    }
-
+    DEBUG << lattice << std::endl;
     return true;
 }
 
@@ -124,14 +117,7 @@ bool Decoder::advance(
     lattice.end_step();
 
     VERBOSE << "pos = " << pos << std::endl;
-    if (LOG_LEVEL <= LOG_VERBOSE)
-    {
-        std::vector<Lattice::ReversePath> paths;
-        paths.reserve(beam_size);
-        lattice.get_paths(std::back_inserter(paths));
-        output_paths(std::cerr, code, pos, paths);
-    }
-
+    VERBOSE << lattice << std::endl;
     return true;
 }
 
@@ -472,6 +458,8 @@ int Decoder::early_update(
     paths.reserve(beam_size);
     dest.get_paths(indeces.crbegin(), indeces.crend(), std::back_inserter(paths));
     auto label = early_update(code, paths, lattice);
+
+    DEBUG << lattice << std::endl;
 
     // 计算各路径梯度
     double sum = 0;
