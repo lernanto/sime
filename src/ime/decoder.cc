@@ -645,7 +645,7 @@ int Decoder::predict(
         assert(!probs.empty());
         assert(texts.size() == probs.size());
 
-        for (index = 0; (texts[index] != text) && (index < texts.size()); ++index);
+        for (index = 0; (index < texts.size()) && (texts[index] != text); ++index);
         if (index < texts.size())
         {
             prob = probs[index];
