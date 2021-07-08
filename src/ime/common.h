@@ -128,6 +128,23 @@ inline std::ostream & operator << (std::ostream &os, const Word &word)
     return os << word.text << '(' << word.code << ')';
 }
 
+inline std::ostream & operator << (std::ostream &os, const Node &node)
+{
+    if (node.word != nullptr)
+    {
+        os << *node.word;
+    }
+
+    os << '(';
+    for (auto &f : node.local_features)
+    {
+        os << f.first << ':' << f.second << ',';
+    }
+    os << ' ' << node.local_score << ')';
+
+    return os;
+}
+
 inline std::ostream & operator << (std::ostream &os, const Metrics &metrics)
 {
     for (auto &i : metrics)

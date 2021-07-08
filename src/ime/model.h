@@ -138,6 +138,7 @@ public:
         assert(features.size() == deltas.size());
         for (size_t i = 0; i < features.size(); ++i)
         {
+            DEBUG << "update: " << features[i] << " +" << deltas[i] << std::endl;;
             update(features[i].begin(), features[i].end(), deltas[i]);
         }
     }
