@@ -1,12 +1,16 @@
 #!/usr/bin/python3 -O
 
 import sys
+import re
 import unidecode
 
 
 for line in sys.stdin:
-    if not line.startswith('#'):
-        line = line.strip()
-        if line:
-            word, _, pinyin = line.partition(':')
-            print('{}\t{}'.format(unidecode.unidecode(pinyin).replace(' ', ''), word))
+    line, _, _ = line.partition('#')
+    line = line.strip()
+    if line:
+        word, _, pinyin = line.partition(':')
+        pinyin = unidecode.unidecode(re.sub('[ǖǘǚǜ]', 'v', pinyin)).replace(' ', '')
+        word = word.partition('_')[0].strip()
+        if pinyin and word:
+            print('{}\t{}'.format(pinyin, word))
