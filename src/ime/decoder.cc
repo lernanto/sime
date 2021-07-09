@@ -25,6 +25,8 @@ std::allocator<Node> Lattice::allocator;
 
 void Lattice::topk(const Node &node)
 {
+    VERBOSE << "add node " << node << std::endl;
+
     if (heap.size() == beam_size)
     {
         std::make_heap(heap.begin(), heap.end(), less);
@@ -33,6 +35,7 @@ void Lattice::topk(const Node &node)
     {
         std::push_heap(heap.begin(), heap.end(), less);
         std::pop_heap(heap.begin(), heap.end(), less);
+        VERBOSE << "drop node " << *heap.back() << std::endl;
     }
 }
 
