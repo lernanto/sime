@@ -737,11 +737,9 @@ inline std::ostream & operator << (std::ostream &os, const Lattice::ReversePath 
             path.push_back(&*i);
         }
     }
-    std::reverse(path.begin(), path.end());
-
-    for (auto &node : path)
+    for (auto i = path.crbegin(); i != path.crend(); ++i)
     {
-        os << *node << ' ';
+        os << **node << ' ';
     }
 
     if ((rpath.rear != nullptr) && !rpath.rear->global_features.empty())
