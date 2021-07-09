@@ -22,16 +22,6 @@
 #include "model.h"
 
 
-namespace
-{
-
-inline bool less(const ime::Node *a, const ime::Node *b)
-{
-    return a->score < b->score;
-}
-
-}   // namespace
-
 namespace ime
 {
 
@@ -454,29 +444,22 @@ public:
     template<typename Iterator>
     void get_paths(size_t num, Iterator out) const
     {
-        if (num == 1)
+        std::vector<ReversePath> paths;
+        paths.reserve(beam_size);
+        for (auto p = *(limits.cend() - 2); p < limits.back(); ++p)
         {
-            *out++ = ReversePath(heap.front());
+            paths.emplace_back(p);
         }
-        else
+
+        std::sort(paths.begin(), paths.end());
+        if (num < paths.size())
         {
-            std::vector<ReversePath> paths;
-            paths.reserve(beam_size);
-            for (auto p = *(limits.cend() - 2); p < limits.back(); ++p)
-            {
-                paths.emplace_back(p);
-            }
+            paths.resize(num);
+        }
 
-            std::sort(paths.begin(), paths.end());
-            if (num < paths.size())
-            {
-                paths.resize(num);
-            }
-
-            for (auto &p : paths)
-            {
-                *out++ = p;
-            }
+        for (auto &p : paths)
+        {
+            *out++ = p;
         }
     }
 

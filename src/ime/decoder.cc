@@ -18,6 +18,16 @@
 #include "dict.h"
 
 
+namespace
+{
+
+inline bool greater(const ime::Node *a, const ime::Node *b)
+{
+    return a->score > b->score;
+}
+
+}   // namespace
+
 namespace ime
 {
 
@@ -29,12 +39,12 @@ void Lattice::topk(const Node &node)
 
     if (heap.size() == beam_size)
     {
-        std::make_heap(heap.begin(), heap.end(), less);
+        std::make_heap(heap.begin(), heap.end(), greater);
     }
     else if (heap.size() > beam_size)
     {
-        std::push_heap(heap.begin(), heap.end(), less);
-        std::pop_heap(heap.begin(), heap.end(), less);
+        std::push_heap(heap.begin(), heap.end(), greater);
+        std::pop_heap(heap.begin(), heap.end(), greater);
         VERBOSE << "drop node " << *heap.back() << std::endl;
     }
 }
