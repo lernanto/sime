@@ -602,7 +602,7 @@ public:
             for (auto &p : paths)
             {
                 texts.push_back(p.text());
-                probs.push_back(exp(p.score() / sum));
+                probs.push_back(exp(p.score()) / sum);
             }
             return true;
         }
