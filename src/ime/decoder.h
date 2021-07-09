@@ -272,7 +272,7 @@ public:
 
         bool operator < (const ReversePath &other) const
         {
-            return rear->score < other.rear->score;
+            return rear->score > other.rear->score;
         }
 
     private:
