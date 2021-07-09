@@ -140,7 +140,11 @@ inline std::ostream & operator << (std::ostream &os, const Node &node)
     {
         os << f.first << ':' << f.second << ',';
     }
-    os << ' ' << node.local_score << ')';
+    for (auto &f : node.global_features)
+    {
+        os << f.first << ':' << f.second << ',';
+    }
+    os << ' ' << node.score << ')';
 
     return os;
 }

@@ -470,6 +470,19 @@ int Decoder::early_update(
     std::vector<std::vector<const Node *>> paths;
     paths.reserve(beam_size);
     dest.get_paths(indeces.crbegin(), indeces.crend(), std::back_inserter(paths));
+
+#if 0
+    for (size_t i = 0; i < paths.size(); ++i)
+    {
+        std::cerr << '#' << i << ' ';
+        for (auto &node: paths[i])
+        {
+            std::cerr << *node << ' ';
+        }
+        std::cerr << std::endl;
+    }
+#endif
+
     auto label = early_update(code, paths, lattice);
 
     DEBUG << lattice << std::endl;

@@ -599,10 +599,13 @@ public:
             {
                 sum += exp(p.score());
             }
-            for (auto &p : paths)
+            for (size_t i = 0; i < paths.size(); ++i)
             {
-                texts.push_back(p.text());
-                probs.push_back(exp(p.score()) / sum);
+                texts.push_back(paths[i].text());
+                probs.push_back(exp(paths[i].score()) / sum);
+                DEBUG << '#' << i << ' '
+                    << probs.back() << ' '
+                    << texts.back() << std::endl;
             }
             return true;
         }
@@ -739,7 +742,13 @@ inline std::ostream & operator << (std::ostream &os, const Lattice::ReversePath 
     }
     for (auto i = path.crbegin(); i != path.crend(); ++i)
     {
-        os << **node << ' ';
+        auto &node = **i;
+        os << *node.word << '(';
+        for (auto &f : node.local_features)
+        {
+            os << f.first << ':' << f.second << ',';
+        }
+        os << ' ' << node.local_score << ") ";
     }
 
     if ((rpath.rear != nullptr) && !rpath.rear->global_features.empty())
