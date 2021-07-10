@@ -138,11 +138,30 @@ bool Decoder::advance(
         }
     }
 
-    std::sort(beam.begin(), beam.end(), std::greater<Node>());
-    if (beam.size() > beam_size)
+    std::vector<const Node *> tosort;
+    tosort.reserve(beam.size());
+    for (auto &node : beam)
     {
-        beam.resize(beam_size);
+        tosort.push_back(&node);
     }
+
+    std::sort(
+        tosort.begin(),
+        tosort.end(),
+        [](const Node *a, const Node *b) { return *a > *b; }
+    );
+    if (tosort.size() > beam_size)
+    {
+        tosort.resize(beam_size);
+    }
+
+    std::vector<Node> new_beam;
+    new_beam.reserve(tosort.size());
+    for (auto &node : tosort)
+    {
+        new_beam.emplace_back(*node);
+    }
+    beam.swap(new_beam);
 
     VERBOSE << "pos = " << pos << std::endl;
     if (LOG_LEVEL <= LOG_VERBOSE)
