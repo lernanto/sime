@@ -564,7 +564,22 @@ bool Decoder::update(
     if (index >= 0)
     {
         assert(beams.back().size() == deltas.size());
-        model.update(beams.back(), deltas);
+
+        std::vector<Features> features;
+        features.reserve(beams.back().size());
+        features.insert(
+            features.end(),
+            beams.back().cbegin(),
+            beams.back().cend()
+        );
+
+        model.update(
+            features.begin(),
+            features.end(),
+            deltas.begin(),
+            deltas.end()
+        );
+
         return true;
     }
     else
@@ -607,8 +622,19 @@ bool Decoder::update(
     {
         if (indeces[i] >= 0)
         {
-            assert(batch_beams[i].back().size() == batch_deltas[i].size());
-            model.update(batch_beams[i].back(), batch_deltas[i]);
+            auto &rear = batch_beams[i].back();
+            assert(rear.size() == batch_deltas[i].size());
+
+            std::vector<Features> features;
+            features.reserve(rear.size());
+            features.insert(features.end(), rear.cbegin(), rear.cend());
+
+            model.update(
+                features.begin(),
+                features.end(),
+                batch_deltas[i].begin(),
+                batch_deltas[i].end()
+            );
         }
     }
 
