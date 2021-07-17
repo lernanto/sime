@@ -93,7 +93,6 @@ bool Decoder::advance(
     auto &prev_beam = beams.back();
     beams.emplace_back();
     auto &beam = beams.back();
-    beam.reserve(beam_size);
 
     for (auto & prev_node : prev_beam)
     {

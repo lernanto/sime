@@ -68,7 +68,7 @@ struct Node
         text_pos(other.text_pos),
         code(other.code),
         word(other.word),
-        prev_word(nullptr),
+        prev_word(other.prev_word),
         local_features(other.local_features),
         global_features(other.global_features),
         local_score(other.local_score),
