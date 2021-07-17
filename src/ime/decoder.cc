@@ -94,15 +94,11 @@ bool Decoder::advance(
     beams.emplace_back();
     auto &beam = beams.back();
 
-    for (auto & prev_node : prev_beam)
+    for (auto &prev_node : prev_beam)
     {
         // 移进
-        beam.emplace_back();
+        beam.emplace_back(&prev_node);
         auto &node = beam.back();
-        node.prev = &prev_node;
-        node.code_pos = prev_node.code_pos;
-        node.text_pos = prev_node.text_pos;
-        node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
         make_features(node, code, pos);
         model.compute_score(node);
 
@@ -123,14 +119,8 @@ bool Decoder::advance(
             {
                 VERBOSE << "code = " << j->first << ", word = " << word.text << std::endl;
 
-                beam.emplace_back();
+                beam.emplace_back(&prev_node, pos, prev_node.text_pos + word.text.length(), &word);
                 auto &node = beam.back();
-                node.prev = &prev_node;
-                node.code_pos = pos;
-                node.text_pos = prev_node.text_pos + word.text.length();
-                node.code = j->first;
-                node.word = &word;
-                node.prev_word = (prev_node.word != nullptr) ? &prev_node : prev_node.prev_word;
                 make_features(node, code, pos);
                 model.compute_score(node);
             }
@@ -459,8 +449,11 @@ size_t Decoder::early_update(
             }
             assert(i < paths.size());
 
-            beams[pos].push_back(paths[i][pos]);
-            beams[pos].back().prev = &beams[pos - 1][prev_indeces[i]];
+            beams[pos].emplace_back(std::move(paths[i][pos]));
+            auto &node = beams[pos].back();
+            node.prev = &beams[pos - 1][prev_indeces[i]];
+            node.prev_word = (node.prev->word != nullptr) ? node.prev : node.prev_word;
+
             DEBUG << "early update label = " << beam_size << std::endl;
             return beam_size;
         }
