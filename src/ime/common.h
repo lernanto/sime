@@ -6,6 +6,7 @@
 #define _COMMON_H_
 
 #include <cmath>
+#include <cassert>
 #include <string>
 #include <vector>
 #include <utility>
@@ -37,7 +38,6 @@ struct Node
     const Node *prev;
     size_t code_pos;
     size_t text_pos;
-    std::string code;
     const Word *word;
     /// 指向路径中前一个有词的节点，用于构造 n-gram 特征
     const Node *prev_word;
@@ -54,7 +54,6 @@ struct Node
         prev(nullptr),
         code_pos(0),
         text_pos(0),
-        code(),
         word(nullptr),
         prev_word(nullptr),
         local_features(),
@@ -62,15 +61,58 @@ struct Node
         local_score(0),
         score(0) {}
 
+    Node(const Node *prev_) :
+        prev(prev_),
+        code_pos(prev_->code_pos),
+        text_pos(prev_->text_pos),
+        word(nullptr),
+        prev_word((prev_->word != nullptr) ? prev_ : prev_->prev_word),
+        local_features(),
+        global_features(),
+        local_score(0),
+        score(0)
+        {
+            assert(prev_ != nullptr);
+        }
+
+    Node(
+        const Node *prev_,
+        size_t code_pos_,
+        size_t text_pos_,
+        const Word *word_
+    ) :
+        prev(prev_),
+        code_pos(code_pos_),
+        text_pos(text_pos_),
+        word(word_),
+        prev_word((prev_->word != nullptr) ? prev_ : prev_->prev_word),
+        local_features(),
+        global_features(),
+        local_score(0),
+        score(0)
+        {
+            assert(prev_ != nullptr);
+        }
+
     Node(const Node &other) :
         prev(other.prev),
         code_pos(other.code_pos),
         text_pos(other.text_pos),
-        code(other.code),
         word(other.word),
         prev_word(other.prev_word),
         local_features(other.local_features),
         global_features(other.global_features),
+        local_score(other.local_score),
+        score(other.score) {}
+
+    Node(Node &&other) :
+        prev(other.prev),
+        code_pos(other.code_pos),
+        text_pos(other.text_pos),
+        word(other.word),
+        prev_word(other.prev_word),
+        local_features(std::move(other.local_features)),
+        global_features(std::move(other.global_features)),
         local_score(other.local_score),
         score(other.score) {}
 
@@ -79,6 +121,18 @@ struct Node
         return score > other.score;
     }
 };
+
+inline void swap(Node &a, Node &b)
+{
+    std::swap(a.prev, b.prev);
+    std::swap(a.code_pos, b.code_pos);
+    std::swap(a.text_pos, b.text_pos);
+    std::swap(a.word, b.word);
+    std::swap(a.local_features, b.local_features);
+    std::swap(a.global_features, b.global_features);
+    std::swap(a.local_score, b.local_score);
+    std::swap(a.score, b.score);
+}
 
 /**
  * 用于记录训练和预测过程中的一些统计量.
