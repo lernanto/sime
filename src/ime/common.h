@@ -25,7 +25,7 @@ struct Word
     std::string code;
     std::string text;
 
-    Word(const std::string &code_, const std::string &text_) :
+    Word(const std::string &code_ = "", const std::string &text_ = "") :
         code(code_), text(text_) {}
 };
 

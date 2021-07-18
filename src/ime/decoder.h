@@ -27,7 +27,7 @@ public:
     Decoder(
         const Dictionary &dict_,
         size_t beam_size_ = 20
-    ) : dict(dict_), beam_size(beam_size_), model() {}
+    ) : dict(dict_), beam_size(beam_size_), model(), bos_eos() {}
 
     bool decode(
         const std::string &code,
@@ -191,10 +191,24 @@ private:
     void init_beams(std::vector<std::vector<Node>> &beams, size_t len) const
     {
         beams.clear();
-        beams.reserve(len + 1);
-        beams.emplace_back();
-        beams.front().emplace_back();
+        beams.reserve(len + 2);
     }
+
+    bool begin_decode(
+        const std::string &code,
+        const std::string &text,
+        size_t beam_size,
+        std::vector<std::vector<Node>> &beams,
+        bool bos = true
+    ) const;
+
+    bool end_decode(
+        const std::string &code,
+        const std::string &text,
+        size_t beam_size,
+        std::vector<std::vector<Node>> &beams,
+        bool eos = true
+    ) const;
 
     bool advance(
         const std::string &code,
@@ -209,6 +223,8 @@ private:
         const std::string &code,
         size_t pos
     ) const;
+
+    void topk(std::vector<Node> &beam, size_t beam_size) const;
 
     std::vector<std::vector<Node>> get_paths(
         const std::vector<std::vector<Node>> &beams,
@@ -278,9 +294,23 @@ private:
         double &prob
     ) const;
 
+    /**
+     * 在集束中查找包含目标路径的节点，如果所有路径都不在集束中，向集束强制添加一个路径的节点.
+     *
+     * indeces 包含了上一步查找匹配到的节点索引，因此不用从头遍历路径，
+     * 只需要从上一步匹配的点向后查找就可以了
+     */
+    bool match(
+        std::vector<std::vector<Node>> &beams,
+        const std::vector<std::vector<Node>> &paths,
+        size_t pos,
+        std::vector<size_t> &indeces
+    ) const;
+
     size_t beam_size;
     const Dictionary &dict;
     Model model;
+    const Word bos_eos;     ///< 代表句子起始和结束的虚拟词，用于构造 n-gram
 };
 
 }   // namespace ime
