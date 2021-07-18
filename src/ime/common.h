@@ -29,6 +29,11 @@ struct Word
         code(code_), text(text_) {}
 };
 
+inline std::ostream & operator << (std::ostream &os, const Word &word)
+{
+    return os << word.text << '(' << word.code << ')';
+}
+
 /**
  * 集束搜索中一个集束中的节点，同时也是输出结果路径中的节点.
  */
@@ -134,6 +139,23 @@ inline void swap(Node &a, Node &b)
     std::swap(a.score, b.score);
 }
 
+inline std::ostream & operator << (std::ostream &os, const Node &node)
+{
+    if (node.word != nullptr)
+    {
+        os << *node.word;
+    }
+
+    os << '(';
+    for (auto &f : node.local_features)
+    {
+        os << f.first << ':' << f.second << ',';
+    }
+    os << ' ' << node.local_score << ')';
+
+    return os;
+}
+
 /**
  * 用于记录训练和预测过程中的一些统计量.
  */
@@ -176,11 +198,6 @@ public:
 private:
     std::map<std::string, double> data;
 };
-
-inline std::ostream & operator << (std::ostream &os, const Word &word)
-{
-    return os << word.text << '(' << word.code << ')';
-}
 
 inline std::ostream & operator << (std::ostream &os, const Metrics &metrics)
 {
