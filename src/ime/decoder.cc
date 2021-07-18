@@ -176,11 +176,14 @@ bool Decoder::advance(
 
     for (auto &prev_node : prev_beam)
     {
-        // 移进
-        beam.emplace_back(&prev_node);
-        auto &node = beam.back();
-        make_features(node, code, pos);
-        model.compute_score(node);
+        if (pos - prev_node.code_pos < dict.max_code_len())
+        {
+            // 剩余编码长度小于词典最大编码长度才移进，否则后面也不可能检索到词了
+            beam.emplace_back(&prev_node);
+            auto &node = beam.back();
+            make_features(node, code, pos);
+            model.compute_score(node);
+        }
 
         // 根据编码子串从词典查找匹配的词进行归约
         auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);

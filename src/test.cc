@@ -18,7 +18,7 @@ int main(int argc, char **argv)
     std::string dict_file = argv[1];
     std::string model_file = argv[2];
 
-    ime::Dictionary dict(dict_file);
+    ime::Dictionary dict(dict_file, 20);
     ime::Decoder decoder(dict);
     decoder.load(model_file);
 
