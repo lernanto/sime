@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     std::string model_file = argv[4];
 
     auto start = std::chrono::high_resolution_clock::now();
-    ime::Dictionary dict(dict_file);
+    ime::Dictionary dict(dict_file, 20);
     auto stop = std::chrono::high_resolution_clock::now();
     INFO << "load dictionary "
         << std::chrono::duration_cast<std::chrono::duration<float>>(stop - start).count()

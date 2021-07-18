@@ -18,6 +18,8 @@ namespace ime
 bool Dictionary::load(std::istream &is)
 {
     data.clear();
+    _max_code_len = 0;
+    _max_text_len = 0;
 
     while (!is.eof())
     {
@@ -28,15 +30,34 @@ bool Dictionary::load(std::istream &is)
         std::getline(is, line);
         std::stringstream ss(line);
         ss >> code >> text;
-        if (!code.empty() && !text.empty())
+        // 丢弃编码或词长度超过限制的词
+        if (
+            !code.empty() && !text.empty()
+            && (code.length() <= code_len_limit)
+            && (text.length() <= text_len_limit)
+        )
         {
             Word word(code, text);
             VERBOSE << "load word " << word << std::endl;
             data.emplace(code, std::move(word));
+
+            if (code.length() > _max_code_len)
+            {
+                _max_code_len = code.length();
+            }
+            if (text.length() > _max_text_len)
+            {
+                _max_text_len = text.length();
+            }
+        }
+        else
+        {
+            INFO << "drop word " << text << '(' << code << ')' << std::endl;
         }
     }
 
-    INFO << data.size() << " words loaded" << std::endl;
+    INFO << "loaded " << data.size() << " words, max code length = "
+        << _max_code_len << ", max text length = " << _max_text_len << std::endl;
     return true;
 }
 
