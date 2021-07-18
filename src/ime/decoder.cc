@@ -30,22 +30,32 @@ bool Decoder::decode(
     DEBUG << "decode code = " << code << ", text = " << text << std::endl;
 
     init_beams(beams, code.length());
-    for (size_t pos = 1; pos <= code.length(); ++pos)
+    auto succ = begin_decode(code, text, beam_size, beams);
+
+    for (size_t pos = 1; succ && (pos <= code.length()); ++pos)
     {
-        if (!advance(code, text, pos, beam_size, beams))
+        succ = advance(code, text, pos, beam_size, beams);
+    }
+
+    if (succ)
+    {
+        succ = end_decode(code, text, beam_size, beams);
+    }
+
+    if (succ)
+    {
+        if (LOG_LEVEL <= LOG_DEBUG)
         {
-            INFO << "cannot decode code = " << code << ", text = " << text << std::endl;
-            return false;
+            auto paths = get_paths(beams);
+            output_paths(std::cerr, code, paths);
         }
+        return true;
     }
-
-    if (LOG_LEVEL <= LOG_DEBUG)
+    else
     {
-        auto paths = get_paths(beams);
-        output_paths(std::cerr, code, paths);
+        INFO << "cannot decode code = " << code << ", text = " << text << std::endl;
+        return false;
     }
-
-    return true;
 }
 
 bool Decoder::decode(
@@ -80,6 +90,76 @@ bool Decoder::decode(
     }
 
     return false;
+}
+
+bool Decoder::begin_decode(
+    const std::string &code,
+    const std::string &text,
+    size_t beam_size,
+    std::vector<std::vector<Node>> &beams,
+    bool bos
+) const
+{
+    beams.emplace_back();
+    beams.back().emplace_back();
+    if (bos)
+    {
+        // 添加一个虚拟的句子起始标识，用于构造 n-gram
+        beams.back().back().word = &bos_eos;
+    }
+
+    return true;
+}
+
+bool Decoder::end_decode(
+    const std::string &code,
+    const std::string &text,
+    size_t beam_size,
+    std::vector<std::vector<Node>> &beams,
+    bool eos
+) const
+{
+    // 最后加入一列特殊的节点，以标记归约完全部编码（和文本）的路径
+    auto &prev_beam = beams.back();
+    beams.emplace_back();
+    auto &beam = beams.back();
+
+    for (auto &prev_node : prev_beam)
+    {
+        if ((prev_node.code_pos == code.length())
+            && (text.empty() || (prev_node.text_pos == text.length())))
+        {
+            beam.emplace_back(&prev_node);
+            auto &node = beam.back();
+
+            if (eos)
+            {
+                // 添加一个虚拟的句子结束标识，用于构造 n-gram
+                node.word = &bos_eos;
+            }
+
+            make_features(node, code, code.length());
+            model.compute_score(node);
+        }
+    }
+
+    if (!beam.empty())
+    {
+        topk(beam, beam_size);
+
+        VERBOSE << "end decode" << std::endl;
+        if (LOG_LEVEL <= LOG_VERBOSE)
+        {
+            auto paths = get_paths(beams);
+            output_paths(std::cerr, code, paths);
+        }
+
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 bool Decoder::advance(
@@ -127,6 +207,60 @@ bool Decoder::advance(
         }
     }
 
+    if (!beam.empty())
+    {
+        topk(beam, beam_size);
+
+        VERBOSE << "pos = " << pos << std::endl;
+        if (LOG_LEVEL <= LOG_VERBOSE)
+        {
+            auto paths = get_paths(beams);
+            output_paths(std::cerr, code, paths);
+        }
+
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void Decoder::make_features(
+    Node &node,
+    const std::string &code,
+    size_t pos
+) const
+{
+    if (node.word != nullptr)
+    {
+        if (!node.word->text.empty())
+        {
+            node.local_features.push_back(std::make_pair("unigram:" + node.word->text, 1));
+        }
+
+        if (node.prev_word != nullptr)
+        {
+            // 回溯前一个词，构造 bigram
+            assert(node.prev_word->word != nullptr);
+            node.local_features.push_back(std::make_pair(
+                "bigram:" + node.prev_word->word->text + "_" + node.word->text,
+                1
+            ));
+        }
+    }
+
+    // 当前未匹配编码长度
+    if (node.code_pos < pos)
+    {
+        std::stringstream ss;
+        ss << "code_len:" << pos - node.code_pos;
+        node.global_features.push_back(std::make_pair(ss.str(), 1));
+    }
+}
+
+void Decoder::topk(std::vector<Node> &beam, size_t beam_size) const
+{
     std::vector<const Node *> tosort;
     tosort.reserve(beam.size());
     for (auto &node : beam)
@@ -151,46 +285,6 @@ bool Decoder::advance(
         new_beam.emplace_back(*node);
     }
     beam.swap(new_beam);
-
-    VERBOSE << "pos = " << pos << std::endl;
-    if (LOG_LEVEL <= LOG_VERBOSE)
-    {
-        auto paths = get_paths(beams);
-        output_paths(std::cerr, code, paths);
-    }
-
-    return true;
-}
-
-void Decoder::make_features(
-    Node &node,
-    const std::string &code,
-    size_t pos
-) const
-{
-    if (node.word != nullptr)
-    {
-        node.local_features.push_back(std::make_pair("unigram:" + node.word->text, 1));
-
-        if (node.prev_word != nullptr)
-        {
-            // 回溯前一个词，构造 bigram
-            assert(node.prev_word->word != nullptr);
-            assert(!node.prev_word->word->text.empty());
-            node.local_features.push_back(std::make_pair(
-                "bigram:" + node.prev_word->word->text + "_" + node.word->text,
-                1
-            ));
-        }
-    }
-
-    // 当前未匹配编码长度
-    if (node.code_pos < pos)
-    {
-        std::stringstream ss;
-        ss << "code_len:" << pos - node.code_pos;
-        node.global_features.push_back(std::make_pair(ss.str(), 1));
-    }
 }
 
 std::vector<std::vector<Node>> Decoder::get_paths(
@@ -407,73 +501,54 @@ size_t Decoder::early_update(
 ) const
 {
     assert(!paths.empty());
-    assert(paths.front().size() == code.length() + 1);
+    assert(paths.front().size() == code.length() + 2);
 
+    auto succ = true;
     init_beams(beams, code.length());
+    begin_decode(code, "", beam_size, beams);
 
     // 为目标路径初始化祖先节点的索引，用于对比路径
-    std::vector<size_t> prev_indeces(paths.size(), 0);
-    std::vector<size_t> indeces(paths.size(), beam_size);
-
-    for (size_t pos = 1; pos <= code.length(); ++pos)
+    std::vector<size_t> indeces(paths.size(), 0);
+    size_t pos;
+    for (pos = 1; succ && (pos <= code.length()); ++pos)
     {
         advance(code, "", pos, beam_size, beams);
-
-        bool found = false;
-        for (size_t i = 0; i < paths.size(); ++i)
-        {
-            indeces[i] = beam_size;
-            if (prev_indeces[i] != beam_size)
-            {
-                for (size_t j = 0; j < beams[pos].size(); ++j)
-                {
-                    if ((beams[pos][j].prev == &beams[pos - 1][prev_indeces[i]])
-                        && (beams[pos][j].word == paths[i][pos].word))
-                    {
-                        indeces[i] = j;
-                        found = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (!found)
-        {
-            // 目标路径全部掉出搜索范围，提前返回结果
-            // 查找祖先节点还在搜索范围内的第一条路径
-            size_t i = 0;
-            while ((prev_indeces[i] == beam_size) && (i < paths.size()))
-            {
-                ++i;
-            }
-            assert(i < paths.size());
-
-            beams[pos].emplace_back(std::move(paths[i][pos]));
-            auto &node = beams[pos].back();
-            node.prev = &beams[pos - 1][prev_indeces[i]];
-            node.prev_word = (node.prev->word != nullptr) ? node.prev : node.prev_word;
-
-            DEBUG << "early update label = " << beam_size << std::endl;
-            return beam_size;
-        }
-
-        prev_indeces.swap(indeces);
+        succ = match(beams, paths, pos, indeces);
     }
 
-    // 搜索结果包含至少一条目标路径，返回排在最前的目标路径
-    for (size_t i = 0; i < prev_indeces.size(); ++i)
+    if (succ)
     {
-        if (prev_indeces[i] != beam_size)
-        {
-            DEBUG << "label = " << prev_indeces[i] << std::endl;
-            return prev_indeces[i];
-        }
+        end_decode(code, "", beam_size, beams);
+        succ = match(beams, paths, pos, indeces);
     }
 
-    // 不应到达这里
-    assert(false);
-    return 0;
+    if (LOG_LEVEL <= LOG_DEBUG)
+    {
+        auto paths = get_paths(beams);
+        output_paths(std::cerr, code, paths);
+    }
+
+    if (succ)
+    {
+        // 搜索结果包含至少一条目标路径，返回排在最前的目标路径
+        for (size_t i = 0; i < indeces.size(); ++i)
+        {
+            if (indeces[i] != beam_size)
+            {
+                DEBUG << "label = " << indeces[i] << std::endl;
+                return indeces[i];
+            }
+        }
+
+        // 不应该到达这里
+        assert(false);
+        return 0;
+    }
+    else
+    {
+        DEBUG << "early update label = " << beam_size << std::endl;
+        return beam_size;
+    }
 }
 
 int Decoder::early_update(
@@ -485,40 +560,17 @@ int Decoder::early_update(
 ) const
 {
     std::vector<std::vector<Node>> dest_beams;
-    decode(code, text, dest_beams);
-
-    // 不是所有路径都能匹配完整汉字串，剔除其中不匹配的
-    std::vector<size_t> indeces;
-    for (size_t i = 0; i < dest_beams.back().size(); ++i)
-    {
-        if (dest_beams.back()[i].text_pos == text.length())
-        {
-            indeces.push_back(i);
-        }
-    }
-
-    if (indeces.empty())
+    if (!decode(code, text, dest_beams))
     {
         // 没有搜索到匹配的路径，增加集束大小再试一次
-        decode(code, text, dest_beams, beam_size * 2);
-
-        indeces.clear();
-        for (size_t i = 0; i < dest_beams.back().size(); ++i)
-        {
-            if (dest_beams.back()[i].text_pos == text.length())
-            {
-                indeces.push_back(i);
-            }
-        }
-
-        if (indeces.empty())
+        if (!decode(code, text, dest_beams, beam_size * 2))
         {
             DEBUG << "cannot decode code = " << code << ", text = " << text << std::endl;
             return -1;
         }
     }
 
-    auto paths = get_paths(dest_beams, indeces);
+    auto paths = get_paths(dest_beams);
     auto label = early_update(code, paths, beams);
 
     // 计算各路径梯度
@@ -542,6 +594,59 @@ int Decoder::early_update(
     }
 
     return label;
+}
+
+bool Decoder::match(
+    std::vector<std::vector<Node>> &beams,
+    const std::vector<std::vector<Node>> &paths,
+    size_t pos,
+    std::vector<size_t> &indeces
+) const
+{
+    assert(!paths.empty());
+    assert(pos < beams.size());
+    assert(pos < paths.front().size());
+    assert(indeces.size() == paths.size());
+
+    std::vector<size_t> prev_indeces(paths.size(), beam_size);
+    prev_indeces.swap(indeces);
+    auto found = false;
+
+    for (size_t i = 0; i < paths.size(); ++i)
+    {
+        indeces[i] = beam_size;
+        if (prev_indeces[i] != beam_size)
+        {
+            for (size_t j = 0; j < beams[pos].size(); ++j)
+            {
+                if ((beams[pos][j].prev == &beams[pos - 1][prev_indeces[i]])
+                    && (beams[pos][j].word == paths[i][pos].word))
+                {
+                    indeces[i] = j;
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!found)
+    {
+        // 目标路径全部掉出集束，查找祖先节点还在集束内的第一条路径
+        size_t i = 0;
+        while ((prev_indeces[i] == beam_size) && (i < paths.size()))
+        {
+            ++i;
+        }
+        assert(i < paths.size());
+
+        beams[pos].emplace_back(paths[i][pos]);
+        auto &node = beams[pos].back();
+        node.prev = &beams[pos - 1][prev_indeces[i]];
+        node.prev_word = (node.prev->word != nullptr) ? node.prev : node.prev_word;
+    }
+
+    return found;
 }
 
 bool Decoder::update(
