@@ -109,10 +109,17 @@ public:
         std::vector<double> &probs
     ) const
     {
+        DEBUG << "predict code = " << code << std::endl;
+
         std::vector<std::vector<Node>> paths;
         if (decode(code, num, paths, probs))
         {
             texts = get_texts(paths);
+
+            for (size_t i = 0; i < texts.size(); ++i)
+            {
+                DEBUG << '#' << i << ' ' << texts[i] << std::endl;
+            }
             return true;
         }
         else
