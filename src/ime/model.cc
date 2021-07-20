@@ -40,7 +40,7 @@ bool Model::load(std::istream &is)
         ss >> feature >> weight;
         if (!feature.empty())
         {
-            DEBUG << "load feature " << feature << ", weight = " << weight << std::endl;
+            VERBOSE << "load feature " << feature << ", weight = " << weight << std::endl;
             weights.emplace(feature, weight);
         }
     }
