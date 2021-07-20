@@ -73,17 +73,18 @@ public:
         const std::vector<std::vector<Node>> &paths
     ) const;
 
-    bool update(
+    size_t update(
         const std::string &code,
         const std::string &text,
-        int &index,
+        size_t &index,
         double &prob
     );
 
-    bool update(
+    void update(
         const std::vector<std::string> &codes,
         const std::vector<std::string> &texts,
-        std::vector<int> &indeces,
+        std::vector<size_t> &positions,
+        std::vector<size_t> &indeces,
         std::vector<double> &probs
     );
 
@@ -331,15 +332,17 @@ private:
      */
     size_t early_update(
         const std::string &code,
-        const std::vector<std::vector<Node>> &dest_beams,
-        std::vector<std::vector<Node>> &beams
+        const std::vector<std::vector<Node>> &paths,
+        std::vector<std::vector<Node>> &beams,
+        size_t &label
     ) const;
 
-    int early_update(
+    size_t early_update(
         const std::string &code,
         const std::string &text,
         std::vector<std::vector<Node>> &beams,
         std::vector<double> &deltas,
+        size_t &label,
         double &prob
     ) const;
 
