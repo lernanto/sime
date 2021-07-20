@@ -371,12 +371,13 @@ bool Decoder::train(std::istream &is, Metrics &metrics)
         {
             DEBUG << "train sample code = " << code << ", text = " << text << std::endl;
 
-            int index;
+            size_t index;
             double prob;
-            if (update(code, text, index, prob))
+            auto pos = update(code, text, index, prob);
+            if (pos > 0)
             {
                 ++succ;
-                if (index >= beam_size)
+                if (pos < code.length() + 2)
                 {
                     ++eu;
                 }
@@ -504,7 +505,8 @@ bool Decoder::train(std::istream &is, size_t batch_size, Metrics &metrics)
 size_t Decoder::early_update(
     const std::string &code,
     const std::vector<std::vector<Node>> &paths,
-    std::vector<std::vector<Node>> &beams
+    std::vector<std::vector<Node>> &beams,
+    size_t &label
 ) const
 {
     assert(!paths.empty());
@@ -529,40 +531,41 @@ size_t Decoder::early_update(
         succ = match(beams, paths, pos, indeces);
     }
 
+    if (succ)
+    {
+        ++pos;
+    }
+    else
+    {
+        DEBUG << "early update pos = " << pos << std::endl;
+    }
+
+    // 搜索结果包含至少一条目标路径，返回排在最前的目标路径
+    // 由于 match 已经正确设置了 indeces，即使在查找路径失败时仍然有效
+    size_t i = 0;
+    while ((i < indeces.size()) && (indeces[i] >= beams.back().size()))
+    {
+        ++i;
+    }
+    assert(i < indeces.size());
+    label = indeces[i];
+
+    DEBUG << "label = " << label << std::endl;
     if (LOG_LEVEL <= LOG_DEBUG)
     {
         auto paths = get_paths(beams);
         output_paths(std::cerr, code, paths);
     }
 
-    if (succ)
-    {
-        // 搜索结果包含至少一条目标路径，返回排在最前的目标路径
-        for (size_t i = 0; i < indeces.size(); ++i)
-        {
-            if (indeces[i] != beam_size)
-            {
-                DEBUG << "label = " << indeces[i] << std::endl;
-                return indeces[i];
-            }
-        }
-
-        // 不应该到达这里
-        assert(false);
-        return 0;
-    }
-    else
-    {
-        DEBUG << "early update label = " << beam_size << std::endl;
-        return beam_size;
-    }
+    return pos;
 }
 
-int Decoder::early_update(
+size_t Decoder::early_update(
     const std::string &code,
     const std::string &text,
     std::vector<std::vector<Node>> &beams,
     std::vector<double> &deltas,
+    size_t &label,
     double &prob
 ) const
 {
@@ -573,12 +576,12 @@ int Decoder::early_update(
         if (!decode(code, text, dest_beams, beam_size * 2))
         {
             DEBUG << "cannot decode code = " << code << ", text = " << text << std::endl;
-            return -1;
+            return 0;
         }
     }
 
     auto paths = get_paths(dest_beams);
-    auto label = early_update(code, paths, beams);
+    auto pos = early_update(code, paths, beams, label);
 
     // 计算各路径梯度
     double sum = 0;
@@ -600,7 +603,7 @@ int Decoder::early_update(
         deltas.push_back(delta);
     }
 
-    return label;
+    return pos;
 }
 
 bool Decoder::match(
@@ -615,14 +618,16 @@ bool Decoder::match(
     assert(pos < paths.front().size());
     assert(indeces.size() == paths.size());
 
-    std::vector<size_t> prev_indeces(paths.size(), beam_size);
+    std::vector<size_t> prev_indeces(
+        paths.size(),
+        std::numeric_limits<size_t>::max()
+    );
     prev_indeces.swap(indeces);
     auto found = false;
 
     for (size_t i = 0; i < paths.size(); ++i)
     {
-        indeces[i] = beam_size;
-        if (prev_indeces[i] != beam_size)
+        if (prev_indeces[i] < beams[pos - 1].size())
         {
             for (size_t j = 0; j < beams[pos].size(); ++j)
             {
@@ -641,32 +646,35 @@ bool Decoder::match(
     {
         // 目标路径全部掉出集束，查找祖先节点还在集束内的第一条路径
         size_t i = 0;
-        while ((prev_indeces[i] == beam_size) && (i < paths.size()))
+        while ((i < prev_indeces.size())
+            && (prev_indeces[i] >= beams[pos - 1].size()))
         {
             ++i;
         }
-        assert(i < paths.size());
+        assert(i < prev_indeces.size());
 
         beams[pos].emplace_back(paths[i][pos]);
         auto &node = beams[pos].back();
         node.prev = &beams[pos - 1][prev_indeces[i]];
         node.prev_word = (node.prev->word != nullptr) ? node.prev : node.prev_word;
+
+        indeces[i] = beams[pos].size() - 1;
     }
 
     return found;
 }
 
-bool Decoder::update(
+size_t Decoder::update(
     const std::string &code,
     const std::string &text,
-    int &index,
+    size_t &index,
     double &prob
 )
 {
     std::vector<std::vector<Node>> beams;
     std::vector<double> deltas;
-    index = early_update(code, text, beams, deltas, prob);
-    if (index >= 0)
+    auto pos = early_update(code, text, beams, deltas, index, prob);
+    if (pos > 0)
     {
         assert(beams.back().size() == deltas.size());
 
@@ -684,20 +692,20 @@ bool Decoder::update(
             deltas.begin(),
             deltas.end()
         );
-
-        return true;
     }
     else
     {
         DEBUG << "cannot decode code = " << code << ", text = " << text << std::endl;
-        return false;
     }
+
+    return pos;
 }
 
-bool Decoder::update(
+void Decoder::update(
     const std::vector<std::string> &codes,
     const std::vector<std::string> &texts,
-    std::vector<int> &indeces,
+    std::vector<size_t> &positions,
+    std::vector<size_t> &indeces,
     std::vector<double> &probs
 )
 {
@@ -706,6 +714,7 @@ bool Decoder::update(
     auto batch_size = codes.size();
     std::vector<std::vector<std::vector<Node>>> batch_beams(batch_size);
     std::vector<std::vector<double>> batch_deltas(batch_size);
+    positions.resize(batch_size);
     indeces.resize(batch_size);
     probs.resize(batch_size);
 
@@ -713,11 +722,12 @@ bool Decoder::update(
     // 并行计算梯度
     for (size_t i = 0; i < batch_size; ++i)
     {
-        indeces[i] = early_update(
+        positions[i] = early_update(
             codes[i],
             texts[i],
             batch_beams[i],
             batch_deltas[i],
+            indeces[i],
             probs[i]
         );
     }
@@ -725,7 +735,7 @@ bool Decoder::update(
     // 批量更新模型
     for (size_t i = 0; i < batch_size; ++i)
     {
-        if (indeces[i] >= 0)
+        if (positions[i] > 0)
         {
             auto &rear = batch_beams[i].back();
             assert(rear.size() == batch_deltas[i].size());
@@ -742,8 +752,6 @@ bool Decoder::update(
             );
         }
     }
-
-    return true;
 }
 
 bool Decoder::update(
@@ -755,22 +763,23 @@ bool Decoder::update(
     size_t &early_update_count
 )
 {
-    std::vector<int> indeces;
+    std::vector<size_t> positions;
+    std::vector<size_t> indeces;
     std::vector<double> probs;
-    update(codes, texts, indeces, probs);
+    update(codes, texts, positions, indeces, probs);
 
     for (size_t i = 0; i < codes.size(); ++i)
     {
-        if (indeces[i] >= 0)
+        if (positions[i] > 0)
         {
             ++success;
+            if (positions[i] < codes[i].length() + 2)
+            {
+                ++early_update_count;
+            }
             if (indeces[i] == 0)
             {
                 ++precision;
-            }
-            else if (indeces[i] >= beam_size)
-            {
-                ++early_update_count;
             }
             loss -= log(probs[i]);
         }
