@@ -176,13 +176,16 @@ bool Decoder::advance(
 
     for (auto &prev_node : prev_beam)
     {
-        if (pos - prev_node.code_pos < dict.max_code_len())
+        beam.emplace_back(&prev_node);
+        auto &node = beam.back();
+        if (fullfill_shift_constraint(node, code, pos))
         {
-            // 剩余编码长度小于词典最大编码长度才移进，否则后面也不可能检索到词了
-            beam.emplace_back(&prev_node);
-            auto &node = beam.back();
             make_features(node, code, pos);
             model.compute_score(node);
+        }
+        else
+        {
+            beam.pop_back();
         }
 
         // 根据编码子串从词典查找匹配的词进行归约
@@ -196,16 +199,17 @@ bool Decoder::advance(
             auto &word = j->second;
             assert(!word.text.empty());
 
-            // 指定是汉字串的情况下，不但要匹配编码串，还要匹配汉字串
-            if (text.empty()
-                || text.compare(prev_node.text_pos, word.text.length(), word.text) == 0)
+            beam.emplace_back(&prev_node, pos, prev_node.text_pos + word.text.length(), &word);
+            auto &node = beam.back();
+            if (fullfill_reduce_constraint(node, code, text, pos))
             {
                 VERBOSE << "code = " << j->first << ", word = " << word.text << std::endl;
-
-                beam.emplace_back(&prev_node, pos, prev_node.text_pos + word.text.length(), &word);
-                auto &node = beam.back();
                 make_features(node, code, pos);
                 model.compute_score(node);
+            }
+            else
+            {
+                beam.pop_back();
             }
         }
     }
