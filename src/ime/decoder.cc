@@ -795,34 +795,27 @@ int Decoder::predict(
 ) const
 {
     int index = -1;
-    std::vector<std::string> texts;
-    std::vector<double> probs;
-    if (predict(code, texts, probs))
-    {
-        assert(!texts.empty());
-        assert(!probs.empty());
-        assert(texts.size() == probs.size());
 
+    std::vector<std::vector<Node>> beams;
+    if (decode(code, beams))
+    {
+        double sum = 0;
+        for (auto &node : beams.back())
+        {
+            sum += exp(node.score);
+        }
+
+        auto texts = get_texts(get_paths(beams));
         for (index = 0; (index < texts.size()) && (texts[index] != text); ++index);
         if (index < texts.size())
         {
-            prob = probs[index];
+            prob = exp(beams.back()[index].score) / sum;
         }
         else
         {
-            DEBUG << "target text not in beam code = " << code << ", text = " << text << std::endl;
-
             // 预测结果中没有包含目标文本，无法计算概率，限定文本解码以获取目标文本分数
-            std::vector<std::vector<Node>> beams;
-            decode(code, beams);
-            assert(!beams.empty());
-            assert(!beams.back().empty());
-
-            double sum = 0;
-            for (auto &node : beams.back())
-            {
-                sum += exp(node.score);
-            }
+            DEBUG << "target text not in beam code = " << code
+                << ", text = " << text << std::endl;
 
             beams.clear();
             if (decode(code, text, beams))
