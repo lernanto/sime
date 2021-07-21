@@ -718,7 +718,7 @@ void Decoder::update(
     indeces.resize(batch_size);
     probs.resize(batch_size);
 
-#pragma omp parallel for num_threads(8)
+#pragma omp parallel for
     // 并行计算梯度
     for (size_t i = 0; i < batch_size; ++i)
     {
@@ -937,7 +937,7 @@ bool Decoder::evaluate(std::istream &is, size_t batch_size, Metrics &metrics) co
             assert(codes.size() == texts.size());
             count += codes.size();
 
-#pragma omp parallel for num_threads(8)
+#pragma omp parallel for
             for (size_t i = 0; i < codes.size(); ++i)
             {
                 double prob = 0;
