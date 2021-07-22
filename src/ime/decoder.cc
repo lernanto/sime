@@ -176,20 +176,19 @@ bool Decoder::advance(
 
     for (auto &prev_node : prev_beam)
     {
-        beam.emplace_back(&prev_node);
-        auto &node = beam.back();
-        if (fullfill_shift_constraint(node, code, pos))
+        auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);
+
+        if (can_shift(prev_node, code, pos))
         {
+            VERBOSE << "shift code = " << subcode << std::endl;
+
+            beam.emplace_back(&prev_node);
+            auto &node = beam.back();
             make_features(node, code, pos);
             model.compute_score(node);
         }
-        else
-        {
-            beam.pop_back();
-        }
 
         // 根据编码子串从词典查找匹配的词进行归约
-        auto subcode = code.substr(prev_node.code_pos, pos - prev_node.code_pos);
         VERBOSE << "code = " << subcode << std::endl;
         std::multimap<std::string, Word>::const_iterator begin;
         std::multimap<std::string, Word>::const_iterator end;
@@ -199,17 +198,14 @@ bool Decoder::advance(
             auto &word = j->second;
             assert(!word.text.empty());
 
-            beam.emplace_back(&prev_node, pos, prev_node.text_pos + word.text.length(), &word);
-            auto &node = beam.back();
-            if (fullfill_reduce_constraint(node, code, text, pos))
+            if (can_reduce(prev_node, code, text, pos, word))
             {
-                VERBOSE << "code = " << j->first << ", word = " << word.text << std::endl;
+                VERBOSE << "reduce word = " << word << std::endl;
+
+                beam.emplace_back(&prev_node, pos, prev_node.text_pos + word.text.length(), &word);
+                auto &node = beam.back();
                 make_features(node, code, pos);
                 model.compute_score(node);
-            }
-            else
-            {
-                beam.pop_back();
             }
         }
     }

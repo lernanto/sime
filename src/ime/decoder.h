@@ -232,40 +232,33 @@ private:
      * 为提高转换成功率，避免无效的节点进入集束，制定一些限制规则过滤节点，
      * 只有有可能转换成功的节点才能加入集束
      */
-    bool fullfill_shift_constraint(
-        Node &node,
+    bool can_shift(
+        const Node &prev_node,
         const std::string &code,
         size_t pos
     ) const
     {
-        assert(node.prev != nullptr);
-
         // 剩余编码长度小于词典最大编码长度才移进，否则后面也不可能检索到词了
         // TODO: 词典中存在词以编码为前缀才归约
         return (pos < code.length())
-            && (pos - node.code_pos < dict.max_code_len());
+            && (pos - prev_node.code_pos < dict.max_code_len());
     }
 
     /**
      * 归约节点是否满足限制.
      */
-    bool fullfill_reduce_constraint(
-        Node &node,
+    bool can_reduce(
+        const Node &prev_node,
         const std::string &code,
         const std::string &text,
-        size_t pos
+        size_t pos,
+        const Word &word
     ) const
     {
-        assert(node.prev != nullptr);
-        assert(node.word != nullptr);
-
         // 指定是汉字串的情况下，不但要匹配编码串，还要匹配汉字串
         // TODO: 后面必须以合法的编码开头才归约
-        return text.empty() || (text.compare(
-            node.prev->text_pos,
-            node.word->text.length(),
-            node.word->text
-        ) == 0);
+        return text.empty()
+            || (text.compare(prev_node.text_pos, word.text.length(), word.text) == 0);
     }
 
     void make_features(
