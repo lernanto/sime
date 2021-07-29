@@ -18,6 +18,7 @@ namespace ime
 bool Dictionary::load(std::istream &is)
 {
     data.clear();
+    _max_id = min_id;
     _max_code_len = 0;
     _max_text_len = 0;
 
@@ -37,10 +38,11 @@ bool Dictionary::load(std::istream &is)
             && (text.length() <= text_len_limit)
         )
         {
-            Word word(code, text);
+            Word word(_max_id, code, text);
             VERBOSE << "load word " << word << std::endl;
             data.emplace(code, std::move(word));
 
+            ++_max_id;
             if (code.length() > _max_code_len)
             {
                 _max_code_len = code.length();
@@ -56,8 +58,10 @@ bool Dictionary::load(std::istream &is)
         }
     }
 
-    INFO << "loaded " << data.size() << " words, max code length = "
-        << _max_code_len << ", max text length = " << _max_text_len << std::endl;
+    INFO << "loaded " << data.size()
+        << " words, ID range = [" << min_id << ", " << _max_id
+        << "), max code length = " << _max_code_len
+        << ", max text length = " << _max_text_len << std::endl;
     return true;
 }
 

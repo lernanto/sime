@@ -22,16 +22,21 @@ namespace ime
  */
 struct Word
 {
+    unsigned int id;
     std::string code;
     std::string text;
 
-    Word(const std::string &code_ = "", const std::string &text_ = "") :
-        code(code_), text(text_) {}
+    Word(
+        unsigned int id_ = 0,
+        const std::string &code_ = "",
+        const std::string &text_ = ""
+    ) :
+        id(id_), code(code_), text(text_) {}
 };
 
 inline std::ostream & operator << (std::ostream &os, const Word &word)
 {
-    return os << word.text << '(' << word.code << ')';
+    return os << word.text << '(' << word.code << ' ' << word.id << ')';
 }
 
 /**
