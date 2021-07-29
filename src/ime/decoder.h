@@ -27,7 +27,13 @@ public:
     Decoder(
         const Dictionary &dict_,
         size_t beam_size_ = 20
-    ) : dict(dict_), beam_size(beam_size_), model(), bos_eos() {}
+    ) :
+        dict(dict_),
+        beam_size(beam_size_),
+        model(),
+        bos_eos(),
+        unigram_base(10000),
+        bigram_base(10000 + dict_.max_id()) {}
 
     bool decode(
         const std::string &code,
@@ -356,6 +362,9 @@ private:
     const Dictionary &dict;
     Model model;
     const Word bos_eos;     ///< 代表句子起始和结束的虚拟词，用于构造 n-gram
+
+    unsigned unigram_base;  ///< unigram 特征的起始编码
+    unsigned bigram_base;   ///< bigram 特征的起使编码
 };
 
 }   // namespace ime

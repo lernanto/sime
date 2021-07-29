@@ -77,12 +77,12 @@ public:
             return old;
         }
 
-        const std::pair<std::string, double> & operator * () const
+        const std::pair<unsigned, double> & operator * () const
         {
             return *_cur;
         }
 
-        const std::pair<std::string, double> * operator -> () const
+        const std::pair<unsigned, double> * operator -> () const
         {
             return &*_cur;
         }
@@ -90,8 +90,8 @@ public:
     private:
         const Node *node;
         bool local;
-        std::vector<std::pair<std::string, double>>::const_iterator _cur;
-        std::vector<std::pair<std::string, double>>::const_iterator _end;
+        std::vector<std::pair<unsigned, double>>::const_iterator _cur;
+        std::vector<std::pair<unsigned, double>>::const_iterator _end;
     };
 
     typedef Iterator const_reverse_iterator;

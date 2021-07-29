@@ -103,7 +103,7 @@ public:
     std::ostream & output_score(std::ostream &os, const Node &node) const;
 
 private:
-    std::unordered_map<std::string, double> weights;
+    std::unordered_map<unsigned, double> weights;
     double learning_rate;
 };
 

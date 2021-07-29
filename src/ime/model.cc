@@ -32,17 +32,14 @@ bool Model::load(std::istream &is)
     while (!is.eof())
     {
         std::string line;
-        std::string feature;
+        unsigned feature;
         double weight;
 
         std::getline(is, line);
         std::stringstream ss(line);
         ss >> feature >> weight;
-        if (!feature.empty())
-        {
-            VERBOSE << "load feature " << feature << ", weight = " << weight << std::endl;
-            weights.emplace(feature, weight);
-        }
+        weights.emplace(feature, weight);
+        VERBOSE << "load feature " << feature << ':' << weight << std::endl;
     }
 
     INFO << weights.size() << " features loaded" << std::endl;

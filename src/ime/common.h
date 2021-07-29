@@ -52,9 +52,9 @@ struct Node
     /// 指向路径中前一个有词的节点，用于构造 n-gram 特征
     const Node *prev_word;
     /// 局部特征，对经过节点的所有路径都生效的特征保存在这里
-    std::vector<std::pair<std::string, double>> local_features;
+    std::vector<std::pair<unsigned int, double>> local_features;
     /// 全局特征，描述整条路径的特征，只有当节点是路径的最后一个节点才生效
-    std::vector<std::pair<std::string, double>> global_features;
+    std::vector<std::pair<unsigned int, double>> global_features;
     /// 为加速计算，保存该节点及之前子路径局部特征的得分
     double local_score;
     /// 以该节点为代表的路径（即以该节点结尾的路径）的得分

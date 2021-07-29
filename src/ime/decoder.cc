@@ -237,26 +237,25 @@ void Decoder::make_features(
 {
     if (node.word != nullptr)
     {
-        if (!node.word->text.empty())
+        if (node.word->id > 0)
         {
-            node.local_features.push_back(std::make_pair("unigram:" + node.word->text, 1));
+            // 词 unigram，ID = 0 代表 BOS/EOS，忽略
+            node.local_features.emplace_back(node.word->id + unigram_base, 1);
         }
 
         if (node.prev_word != nullptr)
         {
             // 回溯前一个词，构造 bigram
             assert(node.prev_word->word != nullptr);
-            node.local_features.push_back(std::make_pair(
-                "bigram:" + node.prev_word->word->text + "_" + node.word->text,
+            node.local_features.emplace_back(
+                node.prev_word->word->id * dict.max_id() + node.word->id + bigram_base,
                 1
-            ));
+            );
         }
     }
 
     // 当前未匹配编码长度
-    std::stringstream ss;
-    ss << "code_len:" << pos - node.code_pos;
-    node.global_features.push_back(std::make_pair(ss.str(), 1));
+    node.global_features.emplace_back(pos - node.code_pos, 1);
 }
 
 void Decoder::topk(std::vector<Node> &beam, size_t beam_size) const
