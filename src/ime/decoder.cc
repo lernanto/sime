@@ -254,12 +254,9 @@ void Decoder::make_features(
     }
 
     // 当前未匹配编码长度
-    if (node.code_pos < pos)
-    {
-        std::stringstream ss;
-        ss << "code_len:" << pos - node.code_pos;
-        node.global_features.push_back(std::make_pair(ss.str(), 1));
-    }
+    std::stringstream ss;
+    ss << "code_len:" << pos - node.code_pos;
+    node.global_features.push_back(std::make_pair(ss.str(), 1));
 }
 
 void Decoder::topk(std::vector<Node> &beam, size_t beam_size) const
