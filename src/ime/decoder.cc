@@ -713,7 +713,7 @@ void Decoder::update(
 
 #pragma omp parallel for
     // 并行计算梯度
-    for (size_t i = 0; i < batch_size; ++i)
+    for (int i = 0; i < batch_size; ++i)
     {
         positions[i] = early_update(
             codes[i],
@@ -924,7 +924,7 @@ bool Decoder::evaluate(std::wistream &is, size_t batch_size, Metrics &metrics) c
             count += codes.size();
 
 #pragma omp parallel for
-            for (size_t i = 0; i < codes.size(); ++i)
+            for (int i = 0; i < codes.size(); ++i)
             {
                 double prob = 0;
                 auto index = predict(codes[i], texts[i], prob);
