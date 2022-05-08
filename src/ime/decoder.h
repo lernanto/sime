@@ -11,6 +11,8 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <locale>
+#include <codecvt>
 
 #include "log.h"
 #include "common.h"
@@ -30,23 +32,23 @@ public:
     ) : dict(dict_), beam_size(beam_size_), model(), bos_eos() {}
 
     bool decode(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         std::vector<std::vector<Node>> &beams,
         size_t beam_size
     ) const;
 
     bool decode(
-        const std::string &code,
+        const CodeString &code,
         std::vector<std::vector<Node>> &beams
     ) const
     {
-        return decode(code, "", beams, beam_size);
+        return decode(code, String(), beams, beam_size);
     }
 
     bool decode(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         std::vector<std::vector<Node>> &beams
     ) const
     {
@@ -54,59 +56,59 @@ public:
     }
 
     bool decode(
-        const std::string &code,
+        const CodeString &code,
         size_t max_path,
         std::vector<std::vector<Node>> &paths,
         std::vector<double> &probs
     ) const;
 
-    std::vector<std::vector<Node>> decode(const std::string &code, size_t max_path = 10) const
+    std::vector<std::vector<Node>> decode(const CodeString &code, size_t max_path = 10) const
     {
         std::vector<std::vector<Node>> beams;
         decode(code, beams);
         return get_paths(beams, max_path);
     }
 
-    std::ostream & output_paths(
-        std::ostream &os,
-        const std::string &code,
+    std::wostream & output_paths(
+        std::wostream &os,
+        const CodeString &code,
         const std::vector<std::vector<Node>> &paths
     ) const;
 
     size_t update(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         size_t &index,
         double &prob
     );
 
     void update(
-        const std::vector<std::string> &codes,
-        const std::vector<std::string> &texts,
+        const std::vector<CodeString> &codes,
+        const std::vector<String> &texts,
         std::vector<size_t> &positions,
         std::vector<size_t> &indeces,
         std::vector<double> &probs
     );
 
     bool update(
-        const std::vector<std::string> &codes,
-        const std::vector<std::string> &texts,
+        const std::vector<CodeString> &codes,
+        const std::vector<String> &texts,
         size_t &success,
         size_t &precision,
         double &loss,
         size_t &early_update_count
     );
 
-    std::vector<std::string> predict(const std::string &code, size_t num = 1) const
+    std::vector<String> predict(const CodeString &code, size_t num = 1) const
     {
         auto paths = decode(code, num);
         return get_texts(paths);
     }
 
     bool predict(
-        const std::string &code,
+        const CodeString &code,
         size_t num,
-        std::vector<std::string> &texts,
+        std::vector<String> &texts,
         std::vector<double> &probs
     ) const
     {
@@ -130,8 +132,8 @@ public:
     }
 
     bool predict(
-        const std::string &code,
-        std::vector<std::string> &texts,
+        const CodeString &code,
+        std::vector<String> &texts,
         std::vector<double> &probs
     ) const
     {
@@ -139,34 +141,37 @@ public:
     }
 
     int predict(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         double &prob
     ) const;
 
-    bool train(std::istream &is, Metrics &metrics);
+    bool train(std::wistream &is, Metrics &metrics);
 
     /**
      * 训练模型，批量更新版本.
      */
-    bool train(std::istream &is, size_t batch_size, Metrics &metrics);
+    bool train(std::wistream &is, size_t batch_size, Metrics &metrics);
 
     bool train(const std::string &fname, Metrics &metrics, size_t batch_size = 1)
     {
         std::ifstream is(fname);
+        std::wbuffer_convert<std::codecvt_utf8<wchar_t>> conv(is.rdbuf());
+        std::wistream wis(&conv);
+
         if (batch_size == 1)
         {
-            return train(is, metrics);
+            return train(wis, metrics);
         }
         else
         {
-            return train(is, batch_size, metrics);
+            return train(wis, batch_size, metrics);
         }
     }
 
-    bool evaluate(std::istream &is, Metrics &metrics) const;
+    bool evaluate(std::wistream &is, Metrics &metrics) const;
 
-    bool evaluate(std::istream &is, size_t batch_size, Metrics &metrics) const;
+    bool evaluate(std::wistream &is, size_t batch_size, Metrics &metrics) const;
 
     bool evaluate(
         const std::string &fname,
@@ -175,13 +180,16 @@ public:
     ) const
     {
         std::ifstream is(fname);
+        std::wbuffer_convert<std::codecvt_utf8<wchar_t>> conv(is.rdbuf());
+        std::wistream wis(&conv);
+
         if (batch_size == 1)
         {
-            return evaluate(is, metrics);
+            return evaluate(wis, metrics);
         }
         else
         {
-            return evaluate(is, batch_size, metrics);
+            return evaluate(wis, batch_size, metrics);
         }
     }
 
@@ -203,24 +211,24 @@ private:
     }
 
     bool begin_decode(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         size_t beam_size,
         std::vector<std::vector<Node>> &beams,
         bool bos = true
     ) const;
 
     bool end_decode(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         size_t beam_size,
         std::vector<std::vector<Node>> &beams,
         bool eos = true
     ) const;
 
     bool advance(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         size_t pos,
         size_t beam_size,
         std::vector<std::vector<Node>> &beams
@@ -234,7 +242,7 @@ private:
      */
     bool can_shift(
         const Node &prev_node,
-        const std::string &code,
+        const CodeString &code,
         size_t pos
     ) const
     {
@@ -249,8 +257,8 @@ private:
      */
     bool can_reduce(
         const Node &prev_node,
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         size_t pos,
         const Word &word
     ) const
@@ -263,7 +271,7 @@ private:
 
     void make_features(
         Node &node,
-        const std::string &code,
+        const CodeString &code,
         size_t pos
     ) const;
 
@@ -294,16 +302,16 @@ private:
         return get_paths(beams, beams.back().size());
     }
 
-    std::vector<std::string> get_texts(
+    std::vector<String> get_texts(
         const std::vector<std::vector<Node>> &paths
     ) const
     {
-        std::vector<std::string> texts;
+        std::vector<String> texts;
         texts.reserve(paths.size());
 
         for (auto &path : paths)
         {
-            std::stringstream ss;
+            std::wstringstream ss;
             for (auto &node : path)
             {
                 if (node.word != nullptr)
@@ -324,15 +332,15 @@ private:
      * 因此需要当所有目标路径都掉出搜索候选以外才中止
      */
     size_t early_update(
-        const std::string &code,
+        const CodeString &code,
         const std::vector<std::vector<Node>> &paths,
         std::vector<std::vector<Node>> &beams,
         size_t &label
     ) const;
 
     size_t early_update(
-        const std::string &code,
-        const std::string &text,
+        const CodeString &code,
+        const String &text,
         std::vector<std::vector<Node>> &beams,
         std::vector<double> &deltas,
         size_t &label,

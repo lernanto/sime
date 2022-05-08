@@ -15,7 +15,7 @@
 namespace ime
 {
 
-bool Dictionary::load(std::istream &is)
+bool Dictionary::load(std::wistream &is)
 {
     data.clear();
     _max_code_len = 0;
@@ -23,12 +23,12 @@ bool Dictionary::load(std::istream &is)
 
     while (!is.eof())
     {
-        std::string line;
-        std::string code;
-        std::string text;
+        std::wstring line;
+        CodeString code;
+        String text;
 
         std::getline(is, line);
-        std::stringstream ss(line);
+        std::wstringstream ss(line);
         ss >> code >> text;
         // 丢弃编码或词长度超过限制的词
         if (

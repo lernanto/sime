@@ -11,6 +11,8 @@
 #include <unordered_map>
 #include <iostream>
 #include <fstream>
+#include <locale>
+#include <codecvt>
 
 #include "log.h"
 #include "common.h"
@@ -30,20 +32,24 @@ class Model
 public:
     explicit Model(double lr = 0.01) : weights(), learning_rate(lr) {}
 
-    bool save(std::ostream &os) const;
+    bool save(std::wostream &os) const;
 
     bool save(const std::string &fname) const
     {
         std::ofstream os(fname);
-        return save(os);
+        std::wbuffer_convert<std::codecvt_utf8<wchar_t>> conv(os.rdbuf());
+        std::wostream wos(&conv);
+        return save(wos);
     }
 
-    bool load(std::istream &is);
+    bool load(std::wistream &is);
 
     bool load(const std::string &fname)
     {
         std::ifstream is(fname);
-        return load(is);
+        std::wbuffer_convert<std::codecvt_utf8<wchar_t>> conv(is.rdbuf());
+        std::wistream wis(&conv);
+        return load(wis);
     }
 
     template<typename Iterator>
@@ -100,10 +106,10 @@ public:
         }
     }
 
-    std::ostream & output_score(std::ostream &os, const Node &node) const;
+    std::wostream & output_score(std::wostream &os, const Node &node) const;
 
 private:
-    std::unordered_map<std::string, double> weights;
+    std::unordered_map<String, double> weights;
     double learning_rate;
 };
 

@@ -12,26 +12,37 @@
 #include <utility>
 #include <map>
 #include <iostream>
+#include <locale>
+#include <codecvt>
 
 
 namespace ime
 {
+
+/// 编码码位，为兼容可能的宽字符编码设为自定义类型
+typedef wchar_t Code;
+
+/// 编码序列
+typedef std::basic_string<Code> CodeString;
+
+/// 文本字符串，为兼容不同宽度的字符设为自定义类型
+typedef std::wstring String;
 
 /**
  * 代表词典中一个词的信息.
  */
 struct Word
 {
-    std::string code;
-    std::string text;
+    CodeString code;
+    String text;
 
-    Word(const std::string &code_ = "", const std::string &text_ = "") :
+    Word(const CodeString &code_ = CodeString(), const String &text_ = String()) :
         code(code_), text(text_) {}
 };
 
-inline std::ostream & operator << (std::ostream &os, const Word &word)
+inline std::wostream & operator << (std::wostream &os, const Word &word)
 {
-    return os << word.text << '(' << word.code << ')';
+    return os << word.text << L'(' << word.code << L')';
 }
 
 /**
@@ -47,9 +58,9 @@ struct Node
     /// 指向路径中前一个有词的节点，用于构造 n-gram 特征
     const Node *prev_word;
     /// 局部特征，对经过节点的所有路径都生效的特征保存在这里
-    std::vector<std::pair<std::string, double>> local_features;
+    std::vector<std::pair<String, double>> local_features;
     /// 全局特征，描述整条路径的特征，只有当节点是路径的最后一个节点才生效
-    std::vector<std::pair<std::string, double>> global_features;
+    std::vector<std::pair<String, double>> global_features;
     /// 为加速计算，保存该节点及之前子路径局部特征的得分
     double local_score;
     /// 以该节点为代表的路径（即以该节点结尾的路径）的得分
@@ -139,7 +150,7 @@ inline void swap(Node &a, Node &b)
     std::swap(a.score, b.score);
 }
 
-inline std::ostream & operator << (std::ostream &os, const Node &node)
+inline std::wostream & operator << (std::wostream &os, const Node &node)
 {
     if (node.word != nullptr)
     {
@@ -204,6 +215,17 @@ inline std::ostream & operator << (std::ostream &os, const Metrics &metrics)
     for (auto &i : metrics)
     {
         os << i.first << " = " << i.second << ", ";
+    }
+    return os;
+}
+
+inline std::wostream & operator << (std::wostream &os, const Metrics &metrics)
+{
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+
+    for (auto &i : metrics)
+    {
+        os << conv.from_bytes(i.first) << " = " << i.second << ", ";
     }
     return os;
 }

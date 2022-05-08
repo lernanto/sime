@@ -21,8 +21,8 @@ namespace ime
 {
 
 bool Decoder::decode(
-    const std::string &code,
-    const std::string &text,
+    const CodeString &code,
+    const String &text,
     std::vector<std::vector<Node>> &beams,
     size_t beam_size
 ) const
@@ -47,7 +47,7 @@ bool Decoder::decode(
         if (LOG_LEVEL <= LOG_DEBUG)
         {
             auto paths = get_paths(beams);
-            output_paths(std::cerr, code, paths);
+            output_paths(std::wcerr, code, paths);
         }
         return true;
     }
@@ -59,7 +59,7 @@ bool Decoder::decode(
 }
 
 bool Decoder::decode(
-    const std::string &code,
+    const CodeString &code,
     size_t max_path,
     std::vector<std::vector<Node>> &paths,
     std::vector<double> &probs
@@ -93,8 +93,8 @@ bool Decoder::decode(
 }
 
 bool Decoder::begin_decode(
-    const std::string &code,
-    const std::string &text,
+    const CodeString &code,
+    const String &text,
     size_t beam_size,
     std::vector<std::vector<Node>> &beams,
     bool bos
@@ -112,8 +112,8 @@ bool Decoder::begin_decode(
 }
 
 bool Decoder::end_decode(
-    const std::string &code,
-    const std::string &text,
+    const CodeString &code,
+    const String &text,
     size_t beam_size,
     std::vector<std::vector<Node>> &beams,
     bool eos
@@ -151,7 +151,7 @@ bool Decoder::end_decode(
         if (LOG_LEVEL <= LOG_VERBOSE)
         {
             auto paths = get_paths(beams);
-            output_paths(std::cerr, code, paths);
+            output_paths(std::wcerr, code, paths);
         }
 
         return true;
@@ -163,8 +163,8 @@ bool Decoder::end_decode(
 }
 
 bool Decoder::advance(
-    const std::string &code,
-    const std::string &text,
+    const CodeString &code,
+    const String &text,
     size_t pos,
     size_t beam_size,
     std::vector<std::vector<Node>> &beams
@@ -190,8 +190,8 @@ bool Decoder::advance(
 
         // 根据编码子串从词典查找匹配的词进行归约
         VERBOSE << "code = " << subcode << std::endl;
-        std::multimap<std::string, Word>::const_iterator begin;
-        std::multimap<std::string, Word>::const_iterator end;
+        std::multimap<CodeString, Word>::const_iterator begin;
+        std::multimap<CodeString, Word>::const_iterator end;
         dict.find(subcode, begin, end);
         for (auto j = begin; j != end; ++j)
         {
@@ -218,7 +218,7 @@ bool Decoder::advance(
         if (LOG_LEVEL <= LOG_VERBOSE)
         {
             auto paths = get_paths(beams);
-            output_paths(std::cerr, code, paths);
+            output_paths(std::wcerr, code, paths);
         }
 
         return true;
@@ -231,7 +231,7 @@ bool Decoder::advance(
 
 void Decoder::make_features(
     Node &node,
-    const std::string &code,
+    const CodeString &code,
     size_t pos
 ) const
 {
@@ -239,7 +239,7 @@ void Decoder::make_features(
     {
         if (!node.word->text.empty())
         {
-            node.local_features.push_back(std::make_pair("unigram:" + node.word->text, 1));
+            node.local_features.push_back(std::make_pair(L"unigram:" + node.word->text, 1));
         }
 
         if (node.prev_word != nullptr)
@@ -247,14 +247,14 @@ void Decoder::make_features(
             // 回溯前一个词，构造 bigram
             assert(node.prev_word->word != nullptr);
             node.local_features.push_back(std::make_pair(
-                "bigram:" + node.prev_word->word->text + "_" + node.word->text,
+                L"bigram:" + node.prev_word->word->text + L"_" + node.word->text,
                 1
             ));
         }
     }
 
     // 当前未匹配编码长度
-    std::stringstream ss;
+    std::wstringstream ss;
     ss << "code_len:" << pos - node.code_pos;
     node.global_features.push_back(std::make_pair(ss.str(), 1));
 }
@@ -312,9 +312,9 @@ std::vector<std::vector<Node>> Decoder::get_paths(
     return paths;
 }
 
-std::ostream & Decoder::output_paths(
-    std::ostream &os,
-    const std::string &code,
+std::wostream & Decoder::output_paths(
+    std::wostream &os,
+    const CodeString &code,
     const std::vector<std::vector<Node>> &paths
 ) const {
     for (size_t i = 0; i < paths.size(); ++i)
@@ -342,7 +342,7 @@ std::ostream & Decoder::output_paths(
     return os;
 }
 
-bool Decoder::train(std::istream &is, Metrics &metrics)
+bool Decoder::train(std::wistream &is, Metrics &metrics)
 {
     size_t count = 0;
     size_t succ = 0;
@@ -352,12 +352,12 @@ bool Decoder::train(std::istream &is, Metrics &metrics)
 
     while (!is.eof())
     {
-        std::string line;
-        std::string code;
-        std::string text;
+        std::wstring line;
+        CodeString code;
+        String text;
 
         std::getline(is, line);
-        std::stringstream ss(line);
+        std::wstringstream ss(line);
         ss >> code >> text;
 
         if (!code.empty() && !text.empty())
@@ -413,7 +413,7 @@ bool Decoder::train(std::istream &is, Metrics &metrics)
     return true;
 }
 
-bool Decoder::train(std::istream &is, size_t batch_size, Metrics &metrics)
+bool Decoder::train(std::wistream &is, size_t batch_size, Metrics &metrics)
 {
     size_t batch = 0;
     size_t count = 0;
@@ -421,17 +421,17 @@ bool Decoder::train(std::istream &is, size_t batch_size, Metrics &metrics)
     size_t prec = 0;
     double loss = 0;
     size_t eu = 0;
-    std::vector<std::string> codes;
-    std::vector<std::string> texts;
+    std::vector<CodeString> codes;
+    std::vector<String> texts;
 
     while (!is.eof())
     {
-        std::string line;
-        std::string code;
-        std::string text;
+        std::wstring line;
+        CodeString code;
+        String text;
 
         std::getline(is, line);
-        std::stringstream ss(line);
+        std::wstringstream ss(line);
         ss >> code >> text;
 
         if (!code.empty() && !text.empty())
@@ -496,7 +496,7 @@ bool Decoder::train(std::istream &is, size_t batch_size, Metrics &metrics)
 }
 
 size_t Decoder::early_update(
-    const std::string &code,
+    const CodeString &code,
     const std::vector<std::vector<Node>> &paths,
     std::vector<std::vector<Node>> &beams,
     size_t &label
@@ -507,20 +507,20 @@ size_t Decoder::early_update(
 
     auto succ = true;
     init_beams(beams, code.length());
-    begin_decode(code, "", beam_size, beams);
+    begin_decode(code, String(), beam_size, beams);
 
     // 为目标路径初始化祖先节点的索引，用于对比路径
     std::vector<size_t> indeces(paths.size(), 0);
     size_t pos;
     for (pos = 1; succ && (pos <= code.length()); ++pos)
     {
-        advance(code, "", pos, beam_size, beams);
+        advance(code, String(), pos, beam_size, beams);
         succ = match(beams, paths, pos, indeces);
     }
 
     if (succ)
     {
-        end_decode(code, "", beam_size, beams);
+        end_decode(code, String(), beam_size, beams);
         succ = match(beams, paths, pos, indeces);
     }
 
@@ -547,15 +547,15 @@ size_t Decoder::early_update(
     if (LOG_LEVEL <= LOG_DEBUG)
     {
         auto paths = get_paths(beams);
-        output_paths(std::cerr, code, paths);
+        output_paths(std::wcerr, code, paths);
     }
 
     return pos;
 }
 
 size_t Decoder::early_update(
-    const std::string &code,
-    const std::string &text,
+    const CodeString &code,
+    const String &text,
     std::vector<std::vector<Node>> &beams,
     std::vector<double> &deltas,
     size_t &label,
@@ -658,8 +658,8 @@ bool Decoder::match(
 }
 
 size_t Decoder::update(
-    const std::string &code,
-    const std::string &text,
+    const CodeString &code,
+    const String &text,
     size_t &index,
     double &prob
 )
@@ -695,8 +695,8 @@ size_t Decoder::update(
 }
 
 void Decoder::update(
-    const std::vector<std::string> &codes,
-    const std::vector<std::string> &texts,
+    const std::vector<CodeString> &codes,
+    const std::vector<String> &texts,
     std::vector<size_t> &positions,
     std::vector<size_t> &indeces,
     std::vector<double> &probs
@@ -748,8 +748,8 @@ void Decoder::update(
 }
 
 bool Decoder::update(
-    const std::vector<std::string> &codes,
-    const std::vector<std::string> &texts,
+    const std::vector<CodeString> &codes,
+    const std::vector<String> &texts,
     size_t &success,
     size_t &precision,
     double &loss,
@@ -782,8 +782,8 @@ bool Decoder::update(
 }
 
 int Decoder::predict(
-    const std::string &code,
-    const std::string &text,
+    const CodeString &code,
+    const String &text,
     double &prob
 ) const
 {
@@ -836,7 +836,7 @@ int Decoder::predict(
     return index;
 }
 
-bool Decoder::evaluate(std::istream &is, Metrics &metrics) const
+bool Decoder::evaluate(std::wistream &is, Metrics &metrics) const
 {
     size_t count = 0;
     size_t succ = 0;
@@ -846,12 +846,12 @@ bool Decoder::evaluate(std::istream &is, Metrics &metrics) const
 
     while (!is.eof())
     {
-        std::string line;
-        std::string code;
-        std::string text;
+        std::wstring line;
+        CodeString code;
+        String text;
 
         std::getline(is, line);
-        std::stringstream ss(line);
+        std::wstringstream ss(line);
         ss >> code >> text;
 
         if (!code.empty() && !text.empty())
@@ -888,7 +888,7 @@ bool Decoder::evaluate(std::istream &is, Metrics &metrics) const
     return true;
 }
 
-bool Decoder::evaluate(std::istream &is, size_t batch_size, Metrics &metrics) const
+bool Decoder::evaluate(std::wistream &is, size_t batch_size, Metrics &metrics) const
 {
     size_t count = 0;
     size_t succ = 0;
@@ -898,16 +898,16 @@ bool Decoder::evaluate(std::istream &is, size_t batch_size, Metrics &metrics) co
 
     while (!is.eof())
     {
-        std::vector<std::string> codes;
-        std::vector<std::string> texts;
+        std::vector<CodeString> codes;
+        std::vector<String> texts;
         for (size_t i = 0; (i < batch_size) && !is.eof(); ++i)
         {
-            std::string line;
-            std::string code;
-            std::string text;
+            std::wstring line;
+            CodeString code;
+            String text;
 
             std::getline(is, line);
-            std::stringstream ss(line);
+            std::wstringstream ss(line);
             ss >> code >> text;
 
             if (!code.empty() && !text.empty())

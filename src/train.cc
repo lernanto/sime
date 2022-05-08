@@ -7,9 +7,17 @@
 #include <vector>
 #include <map>
 #include <iostream>
+#include <locale>
+#include <codecvt>
 #include <chrono>
 
-#include "omp.h"
+#include <fcntl.h>
+#ifdef _WIN32
+#include <io.h>
+#else   // _WIN32
+#include <sys/io.h>
+#endif  // _WIN32
+#include <omp.h>
 
 #include "ime/common.h"
 #include "ime/dict.h"
@@ -18,6 +26,14 @@
 
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    _setmode(_fileno(stdin), _O_WTEXT);
+    _setmode(_fileno(stdout), _O_WTEXT);
+    _setmode(_fileno(stderr), _O_WTEXT);
+#else   // _WIN32
+    std::setlocale(LC_ALL, "");
+#endif  // _WIN32
+
     if (argc < 5)
     {
         ERROR << "usage: "
@@ -66,9 +82,10 @@ int main(int argc, char **argv)
         threads = std::min(static_cast<int>(batch_size), 10);
     }
 
-    INFO << "train dictionary file = " << dict_file
-        << ", train file = " << train_file
-        << ", evaluation file = " << eval_file
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+    INFO << "train dictionary file = " << conv.from_bytes(dict_file)
+        << ", train file = " << conv.from_bytes(train_file)
+        << ", evaluation file = " << conv.from_bytes(eval_file)
         << ", epochs = " << epochs
         << ", batch size = " << batch_size
         << ", threads = " << threads << std::endl;

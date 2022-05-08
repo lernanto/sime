@@ -14,7 +14,7 @@
 namespace ime
 {
 
-bool Model::save(std::ostream &os) const
+bool Model::save(std::wostream &os) const
 {
     for (auto & i : weights)
     {
@@ -25,18 +25,18 @@ bool Model::save(std::ostream &os) const
     return true;
 }
 
-bool Model::load(std::istream &is)
+bool Model::load(std::wistream &is)
 {
     weights.clear();
 
     while (!is.eof())
     {
-        std::string line;
-        std::string feature;
+        std::wstring line;
+        std::wstring feature;
         double weight;
 
         std::getline(is, line);
-        std::stringstream ss(line);
+        std::wstringstream ss(line);
         ss >> feature >> weight;
         if (!feature.empty())
         {
@@ -104,7 +104,7 @@ void Model::compute_score(Node &node) const
     }
 }
 
-std::ostream & Model::output_score(std::ostream &os, const Node &node) const
+std::wostream & Model::output_score(std::wostream &os, const Node &node) const
 {
     for (auto p = &node; p != nullptr; p = p->prev)
     {

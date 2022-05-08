@@ -10,6 +10,8 @@
 #include <map>
 #include <fstream>
 #include <iostream>
+#include <locale>
+#include <codecvt>
 
 #include "common.h"
 
@@ -34,12 +36,14 @@ public:
         load(fname);
     }
 
-    bool load(std::istream &is);
+    bool load(std::wistream &is);
 
     bool load(const std::string &fname)
     {
         std::ifstream is(fname);
-        return load(is);
+        std::wbuffer_convert<std::codecvt_utf8<wchar_t>> conv(is.rdbuf());
+        std::wistream wis(&conv);
+        return load(wis);
     }
 
     size_t max_code_len() const
@@ -53,9 +57,9 @@ public:
     }
 
     void find(
-        const std::string &code,
-        std::multimap<std::string, Word>::const_iterator &begin,
-        std::multimap<std::string, Word>::const_iterator &end
+        const CodeString &code,
+        std::multimap<CodeString, Word>::const_iterator &begin,
+        std::multimap<CodeString, Word>::const_iterator &end
     ) const
     {
         auto range = data.equal_range(code);
@@ -68,7 +72,7 @@ private:
     size_t text_len_limit;      ///< 最大词长限制
     size_t _max_code_len;       ///< 实际载入的最大编码长度
     size_t _max_text_len;       ///< 实际载入的最大词长
-    std::multimap<std::string, Word> data;
+    std::multimap<CodeString, Word> data;
 };
 
 }   // namespace ime

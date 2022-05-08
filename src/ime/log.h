@@ -22,7 +22,7 @@
 #endif  // NDEBUG
 #endif  // LOG_LEVEL
 
-#define LOG(level)  if ((level) >= LOG_LEVEL) std::cerr
+#define LOG(level)  if ((level) >= LOG_LEVEL) std::wcerr
 #define VERBOSE LOG(LOG_VERBOSE) << "[V] " << __FILE__ << ':' << __FUNCTION__ << ':' << __LINE__ << ": "
 #define DEBUG   LOG(LOG_DEBUG) << "[D] " << __FILE__ << ':' << __FUNCTION__ << ':' << __LINE__ << ": "
 #define INFO    LOG(LOG_INFO) << "[I] "
