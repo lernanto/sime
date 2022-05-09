@@ -38,7 +38,7 @@ int main(int argc, char **argv)
     {
         ERROR << "usage: "
             << argv[0]
-            << " DICT_FILE TRAIN_FILE EVAL_FILE [EPOCHS] [BATCH_SIZE] [THREADS]"
+            << " DICT_FILE TRAIN_FILE EVAL_FILE MODEL_FILE [EPOCHS] [BATCH_SIZE] [BEAM_SIZE] [LEARNING_RATE] [THREADS]"
             << std::endl;
         return -1;
     }
@@ -50,6 +50,8 @@ int main(int argc, char **argv)
 
     size_t epochs = 0;
     size_t batch_size = 0;
+    size_t beam_size = 0;
+    double lr = 0.0;
     int threads = 0;
     if (argc >= 6)
     {
@@ -72,6 +74,24 @@ int main(int argc, char **argv)
     if (argc >= 8)
     {
         std::stringstream ss(argv[7]);
+        ss >> beam_size;
+    }
+    else
+    {
+        beam_size = 20;
+    }
+    if (argc >= 9)
+    {
+        std::stringstream ss(argv[8]);
+        ss >> lr;
+    }
+    else
+    {
+        lr = 0.01;
+    }
+    if (argc >= 10)
+    {
+        std::stringstream ss(argv[9]);
         ss >> threads;
 #ifndef _OPENMP
         WARN << "not compiled with OpenMP. thread number has no effect" << std::endl;
@@ -88,6 +108,8 @@ int main(int argc, char **argv)
         << ", evaluation file = " << conv.from_bytes(eval_file)
         << ", epochs = " << epochs
         << ", batch size = " << batch_size
+        << ", beam size = " << beam_size
+        << ", learning rate = " << lr
         << ", threads = " << threads << std::endl;
 
 #ifdef _OPENMP
@@ -101,7 +123,7 @@ int main(int argc, char **argv)
         << std::chrono::duration_cast<std::chrono::duration<float>>(stop - start).count()
         << "s" << std::endl;
 
-    ime::Decoder decoder(dict);
+    ime::Decoder decoder(dict, beam_size, lr);
 
     for (size_t epoch = 0; epoch < epochs; ++epoch)
     {

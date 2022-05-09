@@ -28,8 +28,9 @@ class Decoder
 public:
     Decoder(
         const Dictionary &dict_,
-        size_t beam_size_ = 20
-    ) : dict(dict_), beam_size(beam_size_), model(), bos_eos() {}
+        size_t beam_size_ = 20,
+        double lr = 0.01
+    ) : dict(dict_), beam_size(beam_size_), model(lr), bos_eos() {}
 
     bool decode(
         const CodeString &code,
