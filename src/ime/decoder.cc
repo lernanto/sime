@@ -253,6 +253,25 @@ void Decoder::make_features(
         }
     }
 
+    else
+    {
+        // 移进，当前未匹配编码
+        auto left_code = code.substr(node.code_pos, pos - node.code_pos);
+        std::multimap<CodeString, Word>::const_iterator begin;
+        std::multimap<CodeString, Word>::const_iterator end;
+        dict.find(left_code, begin, end);
+        if (begin != end)
+        {
+            // 未匹配编码是词典词的前缀，构造特征
+            node.global_features.push_back(std::make_pair(L"code:" + left_code, 1));
+        }
+        else
+        {
+            // 未匹配编码不命中任何词
+            node.global_features.push_back(std::make_pair(L"code:", 1));
+        }
+    }
+
     // 当前未匹配编码长度
     std::wstringstream ss;
     ss << "code_len:" << pos - node.code_pos;
